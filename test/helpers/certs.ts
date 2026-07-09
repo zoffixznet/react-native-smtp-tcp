@@ -3,8 +3,8 @@
  * leaf certificates with configurable subjectAltNames. Nothing is committed; all
  * key material is generated into a per-run temp directory and cleaned up.
  *
- * This lets the suite prove certificate chain validation, hostname matching,
- * SPKI pinning, and self-signed rejection against a real Node tls server.
+ * This lets the suite exercise certificate chain validation, hostname matching,
+ * the fingerprint pin, and self-signed rejection against a Node tls server.
  */
 
 import { execFileSync } from 'child_process';
@@ -19,8 +19,6 @@ export interface GeneratedCert {
   key: string;
   /** PEM CA certificate that signed the leaf, or the self-signed cert itself. */
   ca: string;
-  /** Base64 SHA-256 of the leaf's SubjectPublicKeyInfo (for pin tests). */
-  spkiSha256: string;
   /** Colon-separated hex SHA-256 fingerprint of the leaf certificate. */
   fingerprint256: string;
   /** Directory holding the generated files; call cleanup() to remove. */
@@ -41,24 +39,6 @@ function certFingerprint256(certPath: string, cwd: string): string {
   // Format: "SHA256 Fingerprint=AB:CD:...". Keep the hex part.
   const eq = out.indexOf('=');
   return out.slice(eq + 1).trim();
-}
-
-/** Compute the base64 SHA-256 of a certificate's SPKI using openssl. */
-function spkiHash(certPath: string, cwd: string): string {
-  const pub = execFileSync(
-    'openssl',
-    ['x509', '-in', certPath, '-pubkey', '-noout'],
-    { cwd },
-  );
-  const der = execFileSync('openssl', ['pkey', '-pubin', '-outform', 'DER'], {
-    cwd,
-    input: pub,
-  });
-  const hash = execFileSync('openssl', ['dgst', '-sha256', '-binary'], {
-    cwd,
-    input: der,
-  });
-  return Buffer.from(hash).toString('base64');
 }
 
 export interface CertOptions {
@@ -107,7 +87,6 @@ ${sanConfig}
       cert,
       key,
       ca: cert,
-      spkiSha256: spkiHash(join(dir, 'leaf.crt'), dir),
       fingerprint256: certFingerprint256(join(dir, 'leaf.crt'), dir),
       dir,
     };
@@ -139,7 +118,6 @@ ${sanConfig}
     cert: readFileSync(join(dir, 'leaf.crt'), 'utf8'),
     key: readFileSync(join(dir, 'leaf.key'), 'utf8'),
     ca: readFileSync(join(dir, 'ca.crt'), 'utf8'),
-    spkiSha256: spkiHash(join(dir, 'leaf.crt'), dir),
     fingerprint256: certFingerprint256(join(dir, 'leaf.crt'), dir),
     dir,
   };
