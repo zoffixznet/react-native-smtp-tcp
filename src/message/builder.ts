@@ -245,7 +245,11 @@ export function buildMessage(message: MailMessage, ctx: EncodeContext): BuiltMes
     headers.push({ name: 'Reply-To', value: formatHeaderAddress(replyTo) });
   }
   headers.push({ name: 'Message-ID', value: messageId });
-  headers.push({ name: 'Subject', value: encodeHeaderWord(message.subject ?? '') });
+  const subject = message.subject ?? '';
+  // Unconditional control-char gate before any encoding: CR/LF/NUL in a header
+  // value must be rejected, never silently encoded away.
+  assertNoControlChars(subject, 'subject');
+  headers.push({ name: 'Subject', value: encodeHeaderWord(subject) });
   headers.push({ name: 'MIME-Version', value: '1.0' });
 
   // Extra user headers. Reject reserved header names to avoid duplicates and
@@ -320,8 +324,8 @@ function buildBody(message: MailMessage, ctx: EncodeContext): {
     parts.push(buildAttachmentPart(att));
   }
 
+  assertBoundaryAbsent(boundary, parts);
   const body = renderMultipart(boundary, parts);
-  assertBoundaryAbsent(boundary, body);
   return {
     bodyHeaders: [
       { name: 'Content-Type', value: `multipart/mixed; boundary="${boundary}"` },
@@ -367,8 +371,8 @@ function buildAlternative(
       `Content-Transfer-Encoding: ${htmlPart!.encoding}${CRLF}${CRLF}` +
       htmlPart!.body,
   ];
+  assertBoundaryAbsent(boundary, parts);
   const body = renderMultipart(boundary, parts);
-  assertBoundaryAbsent(boundary, body);
   return {
     headers: [
       { name: 'Content-Type', value: `multipart/alternative; boundary="${boundary}"` },
@@ -436,16 +440,22 @@ function renderMultipart(boundary: string, parts: string[]): string {
   return out;
 }
 
-/** A long random boundary, prefixed so it is easy to recognize. */
+/**
+ * A random, collision-free boundary. 16 random bytes (128 bits) is far beyond
+ * any collision risk, and the short prefix keeps the Content-Type header on one
+ * line for the common single-alternative case.
+ */
 function makeBoundary(): string {
-  return `----=_rnsmtp_${randomHex(18)}`;
+  return `=_rnsmtp_${randomHex(16)}`;
 }
 
-/** Ensure the chosen boundary does not appear inside the assembled part data. */
-function assertBoundaryAbsent(boundary: string, body: string): void {
-  if (body.includes(boundary)) {
-    // Astronomically unlikely with 18 random bytes; still fail closed.
-    throw new SmtpMessageError('internal: boundary collision detected');
+/** Ensure the chosen boundary does not appear inside any part's content. */
+function assertBoundaryAbsent(boundary: string, parts: string[]): void {
+  for (const part of parts) {
+    if (part.includes(boundary)) {
+      // Astronomically unlikely with 18 random bytes; still fail closed.
+      throw new SmtpMessageError('internal: boundary collision detected');
+    }
   }
 }
 
