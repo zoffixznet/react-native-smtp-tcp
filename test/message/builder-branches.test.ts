@@ -101,7 +101,7 @@ describe('builder branches', () => {
     ).toThrow(SmtpMessageError);
   });
 
-  it('T-DATA-TERMINATOR-ish: a Cc header is emitted and included in the envelope', () => {
+  it('emits a Cc header and includes cc recipients in the envelope', () => {
     const m = buildMessage(
       {
         from: 'a@example.com',

@@ -90,3 +90,29 @@ The logger is optional and receives already-redacted strings. AUTH command
 arguments and every line of an AUTH exchange are replaced with `***` before they
 reach any logger, and credentials are never included in error messages or their
 stacks. There is no way to turn redaction off.
+
+## Lock-step command sending (no client-side pipelining)
+
+The client always sends synchronizing commands one at a time and waits for each
+reply before sending the next, even when the server advertises PIPELINING. This
+is the safest correct behavior: each reply is unambiguously the reply to the
+last command, so reply-to-command correlation cannot be confused, and it is
+trivially impossible to pipeline anything across the STARTTLS boundary. The
+capability is still parsed and exposed so consumers can see it. Not pipelining is
+always spec-compliant (RFC 2920 requires pipelining only when advertised, never
+forbids lock-step); the modest extra round-trips are acceptable for a mobile
+submission client that sends one message per connection. The reply reader and
+parser still refuse to merge two single-line replies into one multiline reply,
+so a server that volunteers extra replies is treated as a protocol violation.
+
+## Device-only tests recorded as a known limitation
+
+The `react-native-tcp-socket` adapter (T-RN-ADAPTER-SMOKE, T-TRUST-LIMIT on a
+physical device) cannot run in this environment because the native module is not
+present off-device. The adapter is kept as thin as possible over the verified
+v6.4.1 API, the pinning comparison and the drain-before-wrap orchestration it
+relies on are proven in Node, and on-device validation is documented in the
+README under known limitations. T-PROVENANCE-SIG is asserted structurally in the
+publish workflow (`--provenance --access public`, `id-token: write`); `npm audit
+signatures` needs a published package, so it is documented rather than run
+against an unpublished build.
