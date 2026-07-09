@@ -146,3 +146,24 @@ Injectable core / adapters:
 - T-RN-ADAPTER-SMOKE, T-TRUST-LIMIT are device-dependent; the RN adapter is kept
   thin and unit-tested with a stubbed module where possible, with real-device
   execution recorded as a known limitation.
+
+## Outcome
+
+The plan above was followed. The result:
+
+- 202 tests across 22 files, all green. Coverage is 95.6% statements and 90.4%
+  branches (over the 90% gate), enforced by `make cover`. The security-critical
+  paths (STARTTLS drain-before-wrap, certificate and hostname validation, SPKI
+  pinning, injection rejection, DoS caps, AUTH gating, timeouts, mid-dialog
+  failure) are exercised by real adversarial tests and real in-process SMTP/TLS
+  servers, not padded.
+- The pure protocol and message engines import no React Native and no Node
+  modules (only the `buffer` package). The Node adapter and the React Native
+  adapter are the only platform-specific files; the React Native module is
+  imported only by its adapter (the public entry loads it lazily and guarded).
+- Packaging is publish-ready: a `files` allowlist, MIT `LICENSE`, `SECURITY.md`,
+  `CHANGELOG.md`, correct `package.json` metadata, a passing pack/secret-scan
+  check, and a provenance-ready CI plus a manual publish workflow.
+- One design change during the build hardened the STARTTLS drain check: a fully
+  parsed injected reply (queued in the same tick the 220 resolved) or a mid-reply
+  parser state now also aborts the connection, not just leftover buffered bytes.
