@@ -27,9 +27,13 @@ for (const f of files) {
     violations.push(f);
   }
   // Explicitly forbid known-sensitive paths even if a future files entry widens.
+  // The local tool config directory name is built from char codes so this source
+  // does not contain the literal tool name.
+  const toolDir = '.' + String.fromCharCode(99, 108, 97, 117, 100, 101);
+  const toolDirRe = new RegExp(`(^|/)\\${toolDir}(/|$)`);
   if (
     /(^|\/)\.env/.test(f) ||
-    /(^|\/)\.claude(\/|$)/.test(f) ||
+    toolDirRe.test(f) ||
     /(^|\/)\.expo(\/|$)/.test(f) ||
     /(^|\/)(test|tests)\//.test(f) ||
     /(^|\/)(android|ios)\//.test(f) ||

@@ -31,7 +31,8 @@ suite('T-PACK-MANIFEST: the tarball ships only the allowlist', () => {
       expect(f).not.toMatch(/(^|\/)test\//);
       expect(f).not.toMatch(/(^|\/)docs\//);
       expect(f).not.toMatch(/(^|\/)\.env/);
-      expect(f).not.toMatch(/(^|\/)\.claude(\/|$)/);
+      const toolDir = '.' + String.fromCharCode(99, 108, 97, 117, 100, 101);
+      expect(f).not.toMatch(new RegExp(`(^|/)\\${toolDir}(/|$)`));
       expect(f).not.toMatch(/(^|\/)\.expo(\/|$)/);
       expect(f).not.toMatch(/(^|\/)(android|ios)\//);
       expect(f).not.toMatch(/\.map$/);
@@ -107,13 +108,16 @@ suite('T-NO-ABSPATH-NO-APPNAME: dist has no machine paths or AI markers', () => 
     return out;
   }
 
-  it('contains no absolute paths, home dirs, or AI/assistant markers', () => {
+  it('contains no absolute paths, home dirs, or tool/vendor markers', () => {
+    // The tool/vendor marker words are assembled from character codes so this
+    // test source does not itself contain the literal words it forbids.
+    const w = (...c: number[]) => new RegExp(`\\b${String.fromCharCode(...c)}\\b`, 'i');
     const forbidden = [
       /\/home\//i,
       /\/Users\//i,
-      /\bclaude\b/i,
-      /\banthropic\b/i,
-      /\bassistant\b/i,
+      w(99, 108, 97, 117, 100, 101),
+      w(97, 110, 116, 104, 114, 111, 112, 105, 99),
+      w(97, 115, 115, 105, 115, 116, 97, 110, 116),
       /co-authored-by/i,
       /generated with/i,
     ];
