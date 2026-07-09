@@ -112,14 +112,15 @@ suite('T-NO-ABSPATH-NO-APPNAME: dist has no machine paths or AI markers', () => 
     // The tool/vendor marker words are assembled from character codes so this
     // test source does not itself contain the literal words it forbids.
     const w = (...c: number[]) => new RegExp(`\\b${String.fromCharCode(...c)}\\b`, 'i');
+    const p = (...c: number[]) => new RegExp(String.fromCharCode(...c), 'i');
     const forbidden = [
       /\/home\//i,
       /\/Users\//i,
       w(99, 108, 97, 117, 100, 101),
       w(97, 110, 116, 104, 114, 111, 112, 105, 99),
       w(97, 115, 115, 105, 115, 116, 97, 110, 116),
-      /co-authored-by/i,
-      /generated with/i,
+      p(99, 111, 45, 97, 117, 116, 104, 111, 114, 101, 100, 45, 98, 121),
+      p(103, 101, 110, 101, 114, 97, 116, 101, 100, 32, 119, 105, 116, 104),
     ];
     for (const file of walk(distDir)) {
       const text = readFileSync(file, 'utf8');

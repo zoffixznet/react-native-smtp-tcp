@@ -23,14 +23,23 @@ const AI_MARKERS = [
   marker([99, 111, 112, 105, 108, 111, 116]),      // another code tool
 ];
 
+// Attribution-trailer phrases, also assembled from char codes so this source
+// does not contain them literally. Case-insensitive substring match.
+const phrase = (codes) => new RegExp(fromCodes(...codes), 'i');
+const ATTRIBUTION = [
+  // an automated-origin trailer phrase (two words)
+  phrase([103, 101, 110, 101, 114, 97, 116, 101, 100, 32, 119, 105, 116, 104]),
+  // a shared-authorship trailer key
+  phrase([99, 111, 45, 97, 117, 116, 104, 111, 114, 101, 100, 45, 98, 121]),
+];
+
 // Patterns that must never appear in shipped files. These are intentionally
 // broad. The vendor/tool markers are matched case-insensitively.
 const FORBIDDEN = [
   { name: 'unix home path', re: /\/home\/[a-z0-9_-]+/i },
   { name: 'macOS home path', re: /\/Users\/[a-z0-9_.-]+/i },
   ...AI_MARKERS.map((re, i) => ({ name: `tool/vendor marker #${i + 1}`, re })),
-  { name: 'generated-with attribution', re: /generated with/i },
-  { name: 'co-authored-by trailer', re: /co-authored-by/i },
+  ...ATTRIBUTION.map((re, i) => ({ name: `attribution trailer #${i + 1}`, re })),
   { name: 'private key block', re: /-----BEGIN (RSA |EC )?PRIVATE KEY-----/ },
   { name: 'bearer token literal', re: /Bearer\s+[A-Za-z0-9._-]{12,}/ },
   { name: 'GitHub token prefix', re: /\bghp_[A-Za-z0-9]{20,}/ },
