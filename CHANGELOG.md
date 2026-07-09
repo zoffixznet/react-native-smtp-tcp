@@ -3,9 +3,9 @@
 All notable changes to this project are documented here. The format follows
 Keep a Changelog, and this project adheres to Semantic Versioning.
 
-## [Unreleased]
+## [1.0.0] - 2026-07-09
 
-Initial release candidate (1.0.0-rc.1).
+Initial release.
 
 ### Added
 
