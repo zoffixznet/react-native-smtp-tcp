@@ -107,45 +107,70 @@ function tryLoadNodeCrypto(): NodeCrypto | null {
 
 /** The default transport factory. The RN adapter is loaded lazily so this
  * module can be imported and unit-tested in Node without the native module. */
+/**
+ * Minimal shape of an RN-style adapter (connectPlain/connectImplicitTls that
+ * take {host, port, connectTimeoutMs, tls}). Kept separate so the selection
+ * logic is testable without the native module.
+ */
+export interface RnStyleAdapter {
+  connectPlain(o: { host: string; port: number; connectTimeoutMs: number; tls: TlsUpgradeOptions }): SmtpTransport;
+  connectImplicitTls(o: { host: string; port: number; connectTimeoutMs: number; tls: TlsUpgradeOptions }): SmtpTransport;
+}
+
+/** Open a plaintext connection using the RN adapter when present, else Node. */
+export function selectPlainConnect(
+  config: ResolvedConfig,
+  tls: TlsUpgradeOptions,
+  rn: RnStyleAdapter | null,
+): SmtpTransport {
+  // On device the RN adapter is used. In a non-RN environment (the test suite)
+  // the Node adapter runs the exact same engine against real sockets.
+  if (rn) {
+    return rn.connectPlain({
+      host: config.host,
+      port: config.port,
+      connectTimeoutMs: config.timeouts.connectMs,
+      tls,
+    });
+  }
+  return nodeConnectPlain({
+    host: config.host,
+    port: config.port,
+    connectTimeoutMs: config.timeouts.connectMs,
+    servername: config.servername,
+    tls,
+  });
+}
+
+/** Open an implicit-TLS connection using the RN adapter when present, else Node. */
+export function selectImplicitConnect(
+  config: ResolvedConfig,
+  tls: TlsUpgradeOptions,
+  rn: RnStyleAdapter | null,
+): SmtpTransport {
+  if (rn) {
+    return rn.connectImplicitTls({
+      host: config.host,
+      port: config.port,
+      connectTimeoutMs: config.timeouts.connectMs,
+      tls,
+    });
+  }
+  return nodeConnectImplicit({
+    host: config.host,
+    port: config.port,
+    connectTimeoutMs: config.timeouts.connectMs,
+    servername: config.servername,
+    tls,
+  });
+}
+
 const defaultFactory: TransportFactory = {
   connectPlain(config, tls) {
-    // On device the RN adapter is used. In a non-RN environment we fall back to
-    // the Node adapter so the exact same engine runs against real sockets in the
-    // test suite. Selecting the RN adapter requires the native module.
-    const rn = tryLoadRnAdapter();
-    if (rn) {
-      return rn.connectPlain({
-        host: config.host,
-        port: config.port,
-        connectTimeoutMs: config.timeouts.connectMs,
-        tls,
-      });
-    }
-    return nodeConnectPlain({
-      host: config.host,
-      port: config.port,
-      connectTimeoutMs: config.timeouts.connectMs,
-      servername: config.servername,
-      tls,
-    });
+    return selectPlainConnect(config, tls, tryLoadRnAdapter());
   },
   connectImplicitTls(config, tls) {
-    const rn = tryLoadRnAdapter();
-    if (rn) {
-      return rn.connectImplicitTls({
-        host: config.host,
-        port: config.port,
-        connectTimeoutMs: config.timeouts.connectMs,
-        tls,
-      });
-    }
-    return nodeConnectImplicit({
-      host: config.host,
-      port: config.port,
-      connectTimeoutMs: config.timeouts.connectMs,
-      servername: config.servername,
-      tls,
-    });
+    return selectImplicitConnect(config, tls, tryLoadRnAdapter());
   },
 };
 
