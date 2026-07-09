@@ -3,6 +3,15 @@
 Ambiguities resolved during the build, with the option chosen and why. Newest
 entries are appended at the end.
 
+## Internal build spec is not published
+
+The internal build specification is deliberately kept out of this repository. It
+describes how the library was produced and is not part of the library's public
+surface. Keeping it out avoids leaking build context and keeps the repository a
+clean, standalone SMTP client as a human author would ship it. The public
+documentation (README, this file, PLAN.md) is written independently against the
+RFCs.
+
 ## Build system and module format
 
 - ESM is the primary output with an accompanying CJS build, since it is cheap
