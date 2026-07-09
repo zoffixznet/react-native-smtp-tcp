@@ -65,6 +65,13 @@ export interface Caps {
   maxReplyBytes: number;
   /** Hard maximum number of continuation lines in one reply. */
   maxContinuationLines: number;
+  /**
+   * Hard maximum number of complete replies that may sit in the queue awaiting a
+   * consumer. A correct server never leaves more than one un-consumed reply
+   * outside the greeting race, so this bounds the memory a hostile server can
+   * make the client buffer by pacing unsolicited replies across TCP segments.
+   */
+  maxQueuedReplies: number;
 }
 
 /** Layered timeouts (milliseconds). */

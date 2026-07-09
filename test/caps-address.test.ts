@@ -14,10 +14,16 @@ describe('caps and timeout merging', () => {
       maxLineBytes: 1000,
       maxReplyBytes: -1, // invalid, keep base
       maxContinuationLines: 0, // invalid (not > 0), keep base
+      maxQueuedReplies: 32,
     });
     expect(caps.maxLineBytes).toBe(1000);
     expect(caps.maxReplyBytes).toBe(DEFAULT_CAPS.maxReplyBytes);
     expect(caps.maxContinuationLines).toBe(DEFAULT_CAPS.maxContinuationLines);
+    expect(caps.maxQueuedReplies).toBe(32);
+    // An invalid override keeps the base default.
+    expect(mergeCaps(DEFAULT_CAPS, { maxQueuedReplies: -5 }).maxQueuedReplies).toBe(
+      DEFAULT_CAPS.maxQueuedReplies,
+    );
 
     const t = mergeTimeouts(DEFAULT_TIMEOUTS, {
       connectMs: 5000,

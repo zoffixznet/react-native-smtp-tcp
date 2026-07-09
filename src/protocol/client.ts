@@ -651,7 +651,20 @@ export class SmtpClient {
           p.resolve(step.reply);
         } else {
           // No consumer is waiting yet (e.g. the greeting arrived in the same
-          // tick the handler is being armed). Queue it for the next waiter.
+          // tick the handler is being armed). Queue it for the next waiter, but
+          // never let the queue grow without bound: a hostile server that paces
+          // unsolicited replies across TCP segments would otherwise OOM the
+          // client (the per-reply parser caps reset between replies). Fail
+          // closed once the queue exceeds its cap.
+          if (this.replyQueue.length >= this.caps.maxQueuedReplies) {
+            const err = new SmtpProtocolError(
+              'server sent more unsolicited replies than allowed; aborting',
+            );
+            this.failPending(err);
+            this.closedError = this.closedError ?? err;
+            this.close();
+            return;
+          }
           this.replyQueue.push(step.reply);
         }
       }

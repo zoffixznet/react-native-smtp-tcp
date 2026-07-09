@@ -13,6 +13,10 @@ export const DEFAULT_CAPS: Caps = {
   maxReplyBytes: 64 * 1024,
   // No legitimate EHLO advertises hundreds of continuation lines.
   maxContinuationLines: 200,
+  // A correct server never leaves more than one un-consumed reply outside the
+  // greeting race; a small cap turns an unsolicited-reply flood into a bounded,
+  // fail-closed error instead of unbounded memory growth.
+  maxQueuedReplies: 16,
 };
 
 export const DEFAULT_TIMEOUTS: Timeouts = {
@@ -32,6 +36,7 @@ export function mergeCaps(base: Caps, override?: Partial<Caps>): Caps {
     maxLineBytes: pickPositive(override.maxLineBytes, base.maxLineBytes),
     maxReplyBytes: pickPositive(override.maxReplyBytes, base.maxReplyBytes),
     maxContinuationLines: pickPositive(override.maxContinuationLines, base.maxContinuationLines),
+    maxQueuedReplies: pickPositive(override.maxQueuedReplies, base.maxQueuedReplies),
   };
 }
 
