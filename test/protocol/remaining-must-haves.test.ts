@@ -86,7 +86,11 @@ describe('T-FAIL-CLOSED-ABORT (SEC-15)', () => {
     // Through the public API, a message with an injected subject is rejected at
     // build time, before any transaction command reaches the socket.
     const { createTransport } = await import('../../src/index');
-    const sock = new FakeSocket();
+    // A peer certificate whose SAN matches the host, so the named-host identity
+    // check passes and the build-time rejection remains the failure point.
+    const sock = new FakeSocket({
+      peerCertificate: { subjectAltNames: ['localhost'], commonName: 'localhost' },
+    });
     startImplicit(sock);
     const transport = createTransport({
       host: 'localhost',

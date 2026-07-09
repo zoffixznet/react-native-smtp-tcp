@@ -15,6 +15,7 @@
 import TcpSocket, { TLSSocket } from 'react-native-tcp-socket';
 import type { TcpSocket as RnSocket } from 'react-native-tcp-socket';
 import type { PeerCertificate, SmtpTransport, TlsUpgradeOptions } from '../protocol/types';
+import { parseCertIdentity } from '../x509';
 
 /** Options for opening a device connection. */
 export interface RnConnectOptions {
@@ -78,11 +79,27 @@ class RnTransport implements SmtpTransport {
     if (typeof s.getPeerCertificate !== 'function') return undefined;
     const cert = s.getPeerCertificate();
     if (!cert) return undefined;
+    const raw = cert.raw ? new Uint8Array(cert.raw) : undefined;
+    // The native module returns raw DER but no parsed subjectAltName, so the
+    // library parses it here to recover the identity material the on-device
+    // hostname check needs. Without this, named-host identity would go
+    // unverified on Android (the native socket does not check the hostname).
+    let subjectAltNames: string[] | undefined;
+    let commonName: string | undefined;
+    if (raw) {
+      const id = parseCertIdentity(raw);
+      if (id) {
+        subjectAltNames = id.subjectAltNames;
+        commonName = id.commonName;
+      }
+    }
     return {
       fingerprint: cert.fingerprint,
       fingerprint256: cert.fingerprint256,
-      raw: cert.raw ? new Uint8Array(cert.raw) : undefined,
+      raw,
       pubkey: cert.pubkey ? new Uint8Array(cert.pubkey) : undefined,
+      subjectAltNames,
+      commonName,
     };
   }
 

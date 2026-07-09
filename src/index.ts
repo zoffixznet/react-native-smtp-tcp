@@ -346,14 +346,22 @@ export class Transport {
       }
       return;
     }
-    // For named hosts, the socket's own rejectUnauthorized already enforces
-    // identity; when certificate details are available we double-check.
-    if (cert && cert.subjectAltNames) {
-      if (!verifyHostname(expected, cert.subjectAltNames, cert.commonName)) {
-        throw new SmtpSecurityError(
-          `the server certificate does not match the expected identity "${expected}"`,
-        );
-      }
+    // Named hosts. This check is fail-closed and load-bearing on the RN/device
+    // path, where the native socket does NOT verify the hostname: the adapter
+    // parses the leaf DER to populate subjectAltNames/commonName, and this check
+    // is the only hostname verification in that stack. It must never silently
+    // pass by relying on the socket to have enforced identity.
+    if (!cert || cert.subjectAltNames === undefined) {
+      // No parseable certificate identity was available (e.g. the leaf could not
+      // be parsed). Fail closed rather than trusting an unverified channel.
+      throw new SmtpSecurityError(
+        `cannot verify the server identity for "${expected}" (no usable certificate identity available)`,
+      );
+    }
+    if (!verifyHostname(expected, cert.subjectAltNames, cert.commonName)) {
+      throw new SmtpSecurityError(
+        `the server certificate does not match the expected identity "${expected}"`,
+      );
     }
   }
 }
