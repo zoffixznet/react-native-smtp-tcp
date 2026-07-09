@@ -30,6 +30,28 @@ describe('hostname matching', () => {
     expect(verifyHostname('192.0.2.1', ['192.0.2.2'])).toBe(false);
     expect(verifyHostname('192.0.2.1', ['*.example.com'])).toBe(false);
   });
+
+  it('rejects public-suffix / TLD-position wildcards (SEC-6/SEC-7/SEC-11)', () => {
+    // A wildcard sitting in a public-suffix / effective-TLD position must never
+    // validate an arbitrary host: "*.com" must not match every ".com" name, and
+    // "*.co.uk" must not match every ".co.uk" name. RFC 6125 sec 7.2.
+    expect(matchHostname('anything.com', '*.com')).toBe(false);
+    expect(matchHostname('victim.co.uk', '*.co.uk')).toBe(false);
+    expect(matchHostname('a.com.au', '*.com.au')).toBe(false);
+    expect(verifyHostname('anything.com', ['*.com'])).toBe(false);
+    expect(verifyHostname('victim.co.uk', ['*.co.uk'])).toBe(false);
+    // The legitimate registrable-domain wildcard still works.
+    expect(matchHostname('mail.example.co.uk', '*.example.co.uk')).toBe(true);
+    expect(matchHostname('mail.example.com', '*.example.com')).toBe(true);
+  });
+
+  it('rejects wildcards that are not a single leftmost label', () => {
+    // Embedded or trailing "*" is not a legal single-leftmost-label wildcard.
+    expect(matchHostname('mail.example.com', 'm*.example.com')).toBe(false);
+    expect(matchHostname('mail.example.com', '*mail.example.com')).toBe(false);
+    expect(matchHostname('a.b.example.com', '*.*.example.com')).toBe(false);
+    expect(matchHostname('mail.example.com', 'mail.*.com')).toBe(false);
+  });
 });
 
 describe('IP recognition', () => {
