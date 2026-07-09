@@ -108,18 +108,32 @@ export function quotedPrintable(input: string): string {
 }
 
 /**
- * RFC 2047 encoded-word for a header value. Chooses B or Q encoding, keeps each
+ * True when a pure-ASCII value contains a substring shaped like an RFC 2047
+ * encoded-word token (=?charset?enc?text?=). Such text MUST be encoded rather
+ * than emitted verbatim: a receiving MUA parses and decodes encoded-words
+ * wherever they appear syntactically, so passing the literal characters through
+ * would silently substitute different characters on the recipient's display.
+ */
+function looksLikeEncodedWord(value: string): boolean {
+  return /=\?[^?]*\?[^?]*\?[^?]*\?=/.test(value);
+}
+
+/**
+ * RFC 2047 encoded-word for a header value. Chooses B encoding, keeps each
  * encoded-word within 75 characters total, and splits long input into multiple
- * encoded-words joined by CRLF + a single space. Pure-ASCII input with no
- * special need passes through unchanged. Already-encoded values are not
- * re-encoded (idempotent).
+ * encoded-words joined by CRLF + a single space. Plain pure-ASCII input passes
+ * through unchanged; ASCII that resembles an encoded-word is encoded so the
+ * recipient renders the literal characters supplied (no spoofing via a token
+ * that merely looks pre-encoded). Encoding is decided purely from the raw input,
+ * so it is safe even for library-produced output.
  */
 export function encodeHeaderWord(value: string): string {
-  // Idempotency: an already-encoded value is returned as-is.
-  if (/=\?[^?]+\?[bBqQ]\?[^?]*\?=/.test(value) && isAscii(value)) {
-    return value;
-  }
-  if (isAscii(value) && !/[\r\n]/.test(value)) {
+  // Pure ASCII with no CR/LF and no encoded-word-shaped token is safe verbatim.
+  // A content-inspecting "already encoded" guard cannot distinguish library
+  // output from user text that merely resembles it, so any encoded-word-shaped
+  // ASCII is encoded (its '=' and '?' become part of the base64 payload) rather
+  // than passed through. That closes the RFC 2047 spoofing vector.
+  if (isAscii(value) && !/[\r\n]/.test(value) && !looksLikeEncodedWord(value)) {
     return value;
   }
 
@@ -134,9 +148,18 @@ export function encodeHeaderWord(value: string): string {
   const rawBytesPerWord = 45;
 
   const words: string[] = [];
-  for (let i = 0; i < bytes.length; i += rawBytesPerWord) {
-    const chunk = bytes.subarray(i, i + rawBytesPerWord);
+  let i = 0;
+  while (i < bytes.length) {
+    // Never cut in the middle of a multi-byte UTF-8 character: each encoded-word
+    // must encode an integral number of characters (RFC 2047 sec 2). Back the
+    // end off while it lands on a UTF-8 continuation byte (0x80-0xBF).
+    let end = Math.min(i + rawBytesPerWord, bytes.length);
+    while (end < bytes.length && (bytes[end] & 0xc0) === 0x80) {
+      end--;
+    }
+    const chunk = bytes.subarray(i, end);
     words.push(prefix + chunk.toString('base64') + suffix);
+    i = end;
   }
   if (words.length === 0) {
     words.push(prefix + suffix);

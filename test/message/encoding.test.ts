@@ -35,6 +35,26 @@ describe('quoted-printable', () => {
   });
 });
 
+/**
+ * Decode an RFC 2047 base64 encoded-word run the way a conformant receiver does:
+ * decode each =?UTF-8?B?...?= word independently and concatenate the results.
+ * Any linear whitespace between adjacent encoded-words is dropped (RFC 2047
+ * sec 6.2), which matches the CRLF+space join this library emits.
+ */
+function decodeEncodedWords(out: string): string {
+  const tokenRe = /=\?UTF-8\?B\?([^?]*)\?=/g;
+  const parts: Buffer[] = [];
+  let m: RegExpExecArray | null;
+  let sawToken = false;
+  while ((m = tokenRe.exec(out)) !== null) {
+    sawToken = true;
+    parts.push(Buffer.from(m[1], 'base64'));
+  }
+  // If it was not encoded at all, return the raw string.
+  if (!sawToken) return out;
+  return Buffer.concat(parts).toString('utf8');
+}
+
 describe('RFC 2047 encoded-words', () => {
   it('T-RFC2047-SUBJECT: encodes accents, each word <=75 chars', () => {
     const out = encodeHeaderWord('Rappel: réunion café ' + 'é'.repeat(100));
@@ -46,10 +66,45 @@ describe('RFC 2047 encoded-words', () => {
     }
   });
 
-  it('T-RFC2047-IDEMPOTENT: pure-ASCII passes through, encoded not double-encoded', () => {
+  it('T-RFC2047-MULTIBYTE: never splits a multi-byte UTF-8 char across words', () => {
+    // 2-byte accented Latin: 23 * 2 = 46 bytes, so the naive 45-byte cut would
+    // split the 23rd character across the word boundary and yield U+FFFD.
+    for (const value of ['á'.repeat(23), 'é'.repeat(50), 'ñü'.repeat(40)]) {
+      const out = encodeHeaderWord(value);
+      const decoded = decodeEncodedWords(out);
+      expect(decoded).toBe(value);
+      expect(decoded).not.toContain('�');
+    }
+    // 4-byte emoji crossing the boundary too.
+    for (const value of ['😀'.repeat(12), '👍🏽'.repeat(8)]) {
+      const out = encodeHeaderWord(value);
+      const decoded = decodeEncodedWords(out);
+      expect(decoded).toBe(value);
+      expect(decoded).not.toContain('�');
+    }
+  });
+
+  it('T-RFC2047-PLAIN-ASCII: plain pure-ASCII passes through unchanged', () => {
     expect(encodeHeaderWord('Plain ASCII subject')).toBe('Plain ASCII subject');
-    const already = '=?UTF-8?B?Y2Fmw6k=?=';
-    expect(encodeHeaderWord(already)).toBe(already);
+  });
+
+  it('T-RFC2047-NO-SPOOF: encoded-word-shaped ASCII is re-encoded, not passed through', () => {
+    // A subject/name the user literally typed that resembles an encoded-word
+    // must NOT be emitted verbatim; a receiver would otherwise decode it into
+    // different characters. After encoding, the literal characters must be what
+    // a conformant decoder recovers (round-trip equals the original text).
+    const spoofs = [
+      'Re: =?UTF-8?B?8J+YgA==?= your invoice', // token decodes to an emoji
+      'Support =?UTF-8?Q?=41=64=6D=69=6E?=',   // Q token decodes to "Admin"
+      '=?UTF-8?B?Y2Fmw6k=?=',                   // token decodes to "café"
+    ];
+    for (const value of spoofs) {
+      const out = encodeHeaderWord(value);
+      // The output must be encoded (it now carries our own encoded-word wrapper)
+      // and must decode back to the exact literal characters the user supplied.
+      expect(out).not.toBe(value);
+      expect(decodeEncodedWords(out)).toBe(value);
+    }
   });
 
   it('T-RFC2047-NO-SMUGGLE: a display name with CR/LF yields no literal CR/LF', () => {

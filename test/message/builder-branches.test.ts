@@ -163,4 +163,74 @@ describe('builder branches', () => {
       buildMessage({ from: 'a@example.com', to: [42 as never], text: 'x' }, CTX),
     ).toThrow(SmtpMessageError);
   });
+
+  describe('rejects raw C0/C1 controls in structured header fields', () => {
+    // These bytes are NOT CR/LF/NUL, so the previous CR/LF/NUL-only gate let
+    // them pass verbatim into the header. They must now be rejected, matching
+    // the policy already applied to generic user headers.
+    const controls: Array<[string, string]> = [
+      ['VT (0x0B)', '\x0b'],
+      ['BEL (0x07)', '\x07'],
+      ['ESC (0x1B)', '\x1b'],
+      ['FF (0x0C)', '\x0c'],
+      ['DEL (0x7F)', '\x7f'],
+    ];
+
+    for (const [label, ch] of controls) {
+      it(`rejects ${label} in the subject`, () => {
+        expect(() =>
+          buildMessage(
+            { from: 'a@example.com', to: ['b@example.com'], text: 'x', subject: `a${ch}b` },
+            CTX,
+          ),
+        ).toThrow(SmtpMessageError);
+      });
+
+      it(`rejects ${label} in a display name`, () => {
+        expect(() =>
+          buildMessage(
+            { from: { name: `Bob${ch}X`, address: 'a@example.com' }, to: ['b@example.com'], text: 'x' },
+            CTX,
+          ),
+        ).toThrow(SmtpMessageError);
+      });
+
+      it(`rejects ${label} in an attachment filename`, () => {
+        expect(() =>
+          buildMessage(
+            {
+              from: 'a@example.com',
+              to: ['b@example.com'],
+              text: 'x',
+              attachments: [{ filename: `a${ch}b.txt`, content: Buffer.from('x') }],
+            },
+            CTX,
+          ),
+        ).toThrow(SmtpMessageError);
+      });
+
+      it(`rejects ${label} in an attachment content type`, () => {
+        expect(() =>
+          buildMessage(
+            {
+              from: 'a@example.com',
+              to: ['b@example.com'],
+              text: 'x',
+              attachments: [{ filename: 'ok.bin', contentType: `text/plain${ch}`, content: Buffer.from('x') }],
+            },
+            CTX,
+          ),
+        ).toThrow(SmtpMessageError);
+      });
+    }
+
+    it('still allows a plain ASCII subject and display name through', () => {
+      const m = buildMessage(
+        { from: { name: 'Bob Smith', address: 'a@example.com' }, to: ['b@example.com'], text: 'x', subject: 'Hello there' },
+        CTX,
+      );
+      expect(m.data).toMatch(/^Subject: Hello there/m);
+      expect(m.data).toMatch(/^From: Bob Smith <a@example\.com>/m);
+    });
+  });
 });

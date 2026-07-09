@@ -127,7 +127,9 @@ function formatHeaderAddress(addr: Address): string {
   const addrSpec = addr.address;
   if (addr.name && addr.name.length > 0) {
     // The display name is control-char checked, then RFC 2047 encoded if needed.
-    assertNoControlChars(addr.name, 'display name');
+    // Reject every C0/C1 control (not just CR/LF/NUL) so raw ESC/BEL/VT/FF/DEL
+    // cannot reach a header, consistent with generic user headers.
+    assertNoDangerousControls(addr.name, 'display name');
     if (isAscii(addr.name)) {
       // Quote the display name if it contains specials so it stays a phrase.
       if (/[()<>@,;:\\".[\]]/.test(addr.name)) {
@@ -146,7 +148,7 @@ function formatHeaderAddress(addr: Address): string {
 function validateHeaderAddress(addr: Address, fieldName: string, ctx: EncodeContext): void {
   validateAddress(addr.address, fieldName, { requireAscii: !ctx.smtpUtf8 });
   if (addr.name) {
-    assertNoControlChars(addr.name, `${fieldName} display name`);
+    assertNoDangerousControls(addr.name, `${fieldName} display name`);
   }
 }
 
@@ -246,9 +248,10 @@ export function buildMessage(message: MailMessage, ctx: EncodeContext): BuiltMes
   }
   headers.push({ name: 'Message-ID', value: messageId });
   const subject = message.subject ?? '';
-  // Unconditional control-char gate before any encoding: CR/LF/NUL in a header
-  // value must be rejected, never silently encoded away.
-  assertNoControlChars(subject, 'subject');
+  // Unconditional control-char gate before any encoding. Reject every C0/C1
+  // control (not just CR/LF/NUL), matching the policy applied to generic user
+  // headers, so raw ESC/BEL/VT/FF/DEL cannot pass verbatim into the Subject.
+  assertNoDangerousControls(subject, 'subject');
   headers.push({ name: 'Subject', value: encodeHeaderWord(subject) });
   headers.push({ name: 'MIME-Version', value: '1.0' });
 
@@ -383,12 +386,12 @@ function buildAlternative(
 
 /** Build a single attachment MIME part (always base64, always 7-bit safe). */
 function buildAttachmentPart(att: Attachment): string {
-  assertNoControlChars(att.filename, 'attachment filename');
+  assertNoDangerousControls(att.filename, 'attachment filename');
   if (att.filename.length === 0) {
     throw new SmtpMessageError('attachment filename is empty');
   }
   const contentType = att.contentType ?? 'application/octet-stream';
-  assertNoControlChars(contentType, 'attachment content type');
+  assertNoDangerousControls(contentType, 'attachment content type');
 
   let bytes: Buffer;
   if (typeof att.content === 'string') {

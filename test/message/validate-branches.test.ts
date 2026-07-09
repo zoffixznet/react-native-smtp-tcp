@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { Buffer } from 'buffer';
 import {
   assertNoDangerousControls,
   validateClientId,
@@ -51,9 +52,18 @@ describe('encoding branches', () => {
     expect(base64DecodeStrict('YWI=').toString()).toBe('ab');
   });
 
-  it('encodeHeaderWord passes an already-encoded ASCII value unchanged', () => {
+  it('encodeHeaderWord re-encodes encoded-word-shaped ASCII (no verbatim pass-through)', () => {
+    // Literal text that merely resembles an encoded-word must be encoded, not
+    // emitted verbatim, or a receiver would decode it into different characters.
     const enc = '=?UTF-8?Q?caf=C3=A9?=';
-    expect(encodeHeaderWord(enc)).toBe(enc);
+    const out = encodeHeaderWord(enc);
+    expect(out).not.toBe(enc);
+    // The output no longer contains a bare, decodable token equal to the input.
+    expect(out).toMatch(/^=\?UTF-8\?B\?/);
+    // Round-trips back to the exact literal characters the user supplied.
+    const m = /=\?UTF-8\?B\?([^?]*)\?=/.exec(out);
+    expect(m).not.toBeNull();
+    expect(Buffer.from(m![1], 'base64').toString('utf8')).toBe(enc);
   });
 
   it('foldHeaderLine keeps a value with a single short token intact', () => {
