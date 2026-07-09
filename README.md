@@ -15,9 +15,13 @@ itself and delegating only the socket and TLS to a maintained native module.
 ## Highlights
 
 - Implicit TLS on port 465 (preferred) and STARTTLS on port 587.
-- Certificate chain and hostname validation are always on. There is no option to
-  disable them. Private and self-signed servers are supported through an explicit
-  CA PEM string or an SPKI pin, not by turning validation off.
+- Certificate chain validation is always on, with no option to disable it.
+  Hostname verification is enforced on both the Node reference path and, by
+  parsing the peer certificate in JavaScript, on the React Native device path
+  (see Security and Known limitations for the exact device behavior and why
+  SPKI pinning is the most robust device mitigation). Private and self-signed
+  servers are supported through an explicit CA PEM string or an SPKI pin, not by
+  turning validation off.
 - AUTH PLAIN, LOGIN, and XOAUTH2 (with a pluggable OAuth2 token provider), sent
   only over an established, validated TLS channel.
 - A MIME builder for text, HTML (multipart/alternative), and attachments
@@ -94,7 +98,7 @@ returns a `Transport`. Options:
 | `auth` | see below | none | Credentials. |
 | `tls` | `TlsOptions` | see below | TLS trust and identity options. |
 | `timeouts` | `{ connectMs, greetingMs, idleMs, overallMs }` | 15000 / 15000 / 30000 / 60000 | Layered timeouts in milliseconds. |
-| `caps` | `{ maxLineBytes, maxReplyBytes, maxContinuationLines }` | 8192 / 65536 / 200 | DoS caps for reply parsing. |
+| `caps` | `{ maxLineBytes, maxReplyBytes, maxContinuationLines, maxQueuedReplies }` | 8192 / 65536 / 200 / 16 | DoS caps for reply parsing. `maxQueuedReplies` bounds unsolicited replies buffered while no command is pending. |
 | `logger` | `Logger` | none | Optional debug logger. Credentials are always redacted. |
 | `clientId` | `string` | `[127.0.0.1]` | EHLO/HELO client identity (FQDN or address literal). |
 
@@ -159,9 +163,21 @@ generic message and never reveal whether the user or the password was wrong.
   on 587 is supported for servers that require it; on that path the client reads
   exactly the STARTTLS reply, refuses to proceed if any unexpected bytes follow
   it, discards everything learned before TLS, and re-issues EHLO inside TLS.
-- Validation is always on. The library performs certificate chain (PKIX) and
-  hostname validation before it authenticates or sends. It never exposes a switch
-  to disable validation; a build-time lint forbids such constructs.
+- Validation is always on. Certificate chain (PKIX) validation runs before the
+  client authenticates or sends, and there is no switch to disable it (a
+  build-time lint forbids such constructs). Hostname verification also runs
+  before AUTH/send: on the Node reference path the socket enforces it, and on the
+  React Native device path the library parses the peer leaf certificate's
+  subjectAltName/CN in JavaScript and verifies the hostname itself, because the
+  underlying `react-native-tcp-socket` native module does not check the hostname.
+  If the certificate identity cannot be obtained or does not match, the
+  connection fails closed before any credential is sent.
+- Device hardening with SPKI pinning. Because the device hostname check depends
+  on the library parsing the leaf certificate, the most robust mitigation for
+  device deployments is an SPKI pin (`tls.pinnedSpkiSha256`): it binds the exact
+  leaf public key independent of hostname and is enforced post-handshake. Prefer
+  a pin (optionally together with a narrow `tls.ca`) for high-assurance device
+  use.
 - Private or self-signed servers. Do not disable validation. Instead pass the
   server's CA as an inline PEM string in `tls.ca`, or pin the leaf key with
   `tls.pinnedSpkiSha256`. Chain and hostname checks stay active against that
@@ -223,14 +239,25 @@ STARTTLS with a password, and OAuth2 with a token provider.
   on a physical device or emulator with the native module present; validate it on
   your target device.
 - `react-native-tcp-socket` does not expose a JavaScript knob for the TLS minimum
-  version, cipher list, or SNI override. On device, those are governed by the
-  platform TLS stack. The minimum-version and cipher preferences configured here
-  are enforced on the Node reference path; on device the client still treats a
-  failed or downgraded handshake as an abort and performs post-handshake identity
-  and pin checks.
+  version, cipher list, or SNI override, so those cannot be configured
+  pre-handshake on device; they are governed by the platform TLS stack (modern
+  Android/iOS default to TLS 1.2+ with AEAD suites). The minimum-version and
+  cipher preferences configured here are enforced pre-handshake on the Node
+  reference path. On device the client applies a post-handshake floor instead: it
+  reads the negotiated protocol version and aborts if it is below the configured
+  minimum, so a downgraded handshake is refused even though it could not be
+  prevented at negotiation time. It cannot refuse a specific weak cipher on device
+  beyond what the platform already declines.
+- Hostname verification on device is performed by this library in JavaScript by
+  parsing the leaf certificate's subjectAltName/CN, because the native module
+  does not verify the hostname itself and does not return a parsed
+  subjectAltName. This is enforced fail-closed before AUTH/send. For the strongest
+  device guarantee, add an SPKI pin (`tls.pinnedSpkiSha256`), which is
+  hostname-independent.
 - SPKI pinning on device is best-effort and post-handshake, because the native
   module exposes the peer certificate only after the handshake completes. Chain
-  and hostname checks still run against the configured trust anchor.
+  validation and the JavaScript hostname check run against the configured trust
+  anchor.
 - Out of scope for this version: DNS/MX resolution (configure an explicit host),
   DKIM signing (the submission server handles it), connection pooling, and
   IMAP/POP.

@@ -8,6 +8,26 @@ Keep a Changelog, and this project adheres to Semantic Versioning.
 Initial release candidate (1.0.0-rc.1). The 1.0.0 release will be finalized
 after the security review.
 
+### Security
+
+- Verify named-host identity on the React Native device path in JavaScript by
+  parsing the peer leaf certificate's subjectAltName/CN, because the native
+  socket does not check the hostname. Named-host identity now fails closed
+  instead of trusting the channel when identity material is missing or does not
+  match.
+- Enforce a post-handshake TLS version floor so a downgraded handshake is
+  refused on device, where the minimum version cannot be set pre-handshake.
+- Bound the queue of unsolicited server replies (new `caps.maxQueuedReplies`) so
+  a hostile server pacing replies across TCP segments cannot exhaust memory.
+- Reject wildcard certificate SANs in a public-suffix / TLD position (for
+  example `*.com`, `*.co.uk`) and any wildcard that is not a single leftmost
+  label.
+- Reject every C0/C1 control character (not only CR/LF/NUL) in the subject,
+  display names, and attachment filename/content-type.
+- Encode RFC 2047 encoded-words on UTF-8 character boundaries (no split
+  multi-byte characters) and encode encoded-word-shaped ASCII rather than
+  emitting it verbatim, preventing subject/display-name spoofing.
+
 ### Added
 
 - SMTP submission client for React Native over a native TCP/TLS socket.
