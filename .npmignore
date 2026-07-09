@@ -21,8 +21,11 @@ SECURITY.md
 
 .env
 .env.*
-.claude/
 .expo/
 .gitignore
 .npmrc
 *.tgz
+
+# Local tool state directories (tool-agnostic patterns)
+.*ai*/
+.agent*/

@@ -7,7 +7,10 @@ coverage/
 # Local environment and editor state
 .env
 .env.*
-.claude/
 .expo/
 .DS_Store
 *.tsbuildinfo
+
+# Local tool state directories (tool-agnostic patterns)
+.*ai*/
+.agent*/

@@ -43,7 +43,9 @@ const FORBIDDEN = [
   { name: 'private key block', re: /-----BEGIN (RSA |EC )?PRIVATE KEY-----/ },
   { name: 'bearer token literal', re: /Bearer\s+[A-Za-z0-9._-]{12,}/ },
   { name: 'GitHub token prefix', re: /\bghp_[A-Za-z0-9]{20,}/ },
-  { name: 'Resend key prefix', re: /\bre_[A-Za-z0-9]{16,}/ },
+  // Rule labels must stay vendor-agnostic per the no-leak policy: never name a
+  // specific SMTP/email provider here, only describe the key shape.
+  { name: 'vendor API key prefix', re: /\bre_[A-Za-z0-9]{16,}/ },
 ];
 
 // Public identifiers that are intentionally part of this package (the author
@@ -118,6 +120,30 @@ if (existsSync(distDir)) {
 } else {
   console.error('dist/ does not exist; run the build first.');
   process.exit(2);
+}
+
+// 1b. Scan git-tracked repo metadata files. The tarball never ships these, but
+// they are public in the git repo, so a marker in an ignore file or dotfile must
+// still be caught. This closes the blind spot where markers hid in .gitignore /
+// .npmignore and other tracked config files.
+try {
+  const tracked = execFileSync('git', ['ls-files'], {
+    cwd: process.cwd(),
+    encoding: 'utf8',
+  })
+    .split('\n')
+    .map((p) => p.trim())
+    .filter(Boolean);
+  const metaRe = /(^|\/)(\.[^/]+|.*\.(json|cjs|mjs|ya?ml|md|txt))$/i;
+  for (const rel of tracked) {
+    // Skip large generated/vendored files and the built dist (scanned above).
+    if (rel === 'package-lock.json') continue;
+    if (rel.startsWith('dist/')) continue;
+    if (metaRe.test(rel)) scanFile(join(process.cwd(), rel));
+  }
+} catch {
+  // Not a git checkout (e.g. an unpacked tarball); the tarball scan below covers
+  // shipped files, so skip the metadata sweep silently.
 }
 
 // 2. Scan the publish tarball contents (unless --dist).
