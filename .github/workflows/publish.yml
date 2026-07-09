@@ -1,0 +1,51 @@
+name: Publish
+
+# Publishing is manual only. It never runs automatically on push. A human
+# triggers it from the Actions tab (workflow_dispatch) or by pushing a version
+# tag, and the job publishes to npm with provenance via OIDC trusted publishing.
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Required for npm provenance / OIDC trusted publishing.
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # npm >= 9.5.0 is required for --provenance; Node 20 ships a newer npm.
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check, lint, and test with coverage
+        run: |
+          npm run typecheck
+          npm run lint
+          npm run cover
+
+      - name: Build
+        run: npm run build
+
+      - name: Pack manifest and secret/leak scan
+        run: npm run pack-check
+
+      - name: Publish to npm with provenance
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
