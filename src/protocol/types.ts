@@ -24,10 +24,12 @@ export interface SmtpTransport {
    */
   upgradeToTLS(opts: TlsUpgradeOptions): SmtpTransport;
   /**
-   * Best-effort peer certificate access for post-handshake pinning where the
-   * platform supports it.
+   * Peer certificate access for the optional post-handshake pin check. The
+   * native transport resolves this asynchronously (the underlying module returns
+   * a promise), so callers await it; the Node adapter returns synchronously and
+   * awaiting a plain value is a no-op.
    */
-  getPeerCertificate?(): PeerCertificate | undefined;
+  getPeerCertificate?(): Promise<PeerCertificate | undefined> | PeerCertificate | undefined;
   /** Best-effort negotiated TLS protocol version ("TLSv1.2", "TLSv1.3", ...). */
   getProtocol?(): string | undefined;
 }
@@ -43,18 +45,22 @@ export interface TlsUpgradeOptions {
   host?: string;
 }
 
-/** Minimal peer certificate view used for SPKI pinning and identity checks. */
+/**
+ * Peer certificate view used by the optional certificate-fingerprint pin. The
+ * fields mirror what the platforms actually expose after the handshake: a
+ * SHA-256 fingerprint (colon-separated hex), a SHA-1 fingerprint, and the
+ * base64-encoded public key. There is deliberately no raw DER or parsed
+ * subjectAltName here: hostname identity is enforced by the TLS handshake
+ * (Node's rejectUnauthorized, or native endpoint identification on device), not
+ * in JavaScript.
+ */
 export interface PeerCertificate {
-  raw?: Uint8Array;
-  /** Colon-separated hex fingerprint, if the platform provides one. */
+  /** Colon-separated hex SHA-1 fingerprint, if the platform provides one. */
   fingerprint?: string;
+  /** Colon-separated hex SHA-256 fingerprint of the leaf certificate. */
   fingerprint256?: string;
-  /** DER-encoded SubjectPublicKeyInfo, if the platform provides it. */
-  pubkey?: Uint8Array;
-  /** subjectAltName dNSName / IP entries, normalized to plain strings. */
-  subjectAltNames?: string[];
-  /** subject Common Name, used only as a legacy fallback. */
-  commonName?: string;
+  /** Base64-encoded public key (DER SubjectPublicKeyInfo), if provided. */
+  pubkey?: string;
 }
 
 /** DoS caps for reply parsing. */

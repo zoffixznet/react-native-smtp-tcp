@@ -12,12 +12,10 @@ import { driveFake } from './fake-driver';
 const EHLO_NO_UTF8 = '250-test.local\r\n250-AUTH PLAIN\r\n250 8BITMIME\r\n';
 
 function scripted(): FakeSocket {
-  // Provide a peer certificate whose SAN matches the test host ('localhost') so
-  // the fail-closed named-host identity check passes, mirroring a real secure
-  // connection where the leaf certificate identifies the server.
-  const sock = new FakeSocket({
-    peerCertificate: { subjectAltNames: ['localhost'], commonName: 'localhost' },
-  });
+  // The handshake is authoritative for chain + hostname, so no certificate
+  // fields are needed here; the client authenticates over the completed secure
+  // connection (no pin configured).
+  const sock = new FakeSocket();
   queueMicrotask(() => {
     sock.fireSecureConnect();
     sock.serverSend('220 test.local ESMTP\r\n');

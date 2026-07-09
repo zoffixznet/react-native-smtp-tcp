@@ -57,8 +57,8 @@ describe('certificate validation (SEC-6, SEC-7)', () => {
   });
 });
 
-describe('SPKI pinning (SEC-8)', () => {
-  it('T-SPKI-PIN-POS-NEG: succeeds on a matching pin, fails on a mismatching one', async () => {
+describe('optional certificate-fingerprint pinning', () => {
+  it('T-CERT-PIN-POS-NEG: succeeds on a matching pin, fails on a mismatching one', async () => {
     const cert = generateCert({ altNames: ['DNS:localhost'], commonName: 'localhost' });
     const attacker = generateCert({ altNames: ['DNS:localhost'], commonName: 'localhost' });
     const server = await startTestServer({
@@ -69,25 +69,25 @@ describe('SPKI pinning (SEC-8)', () => {
       expectPass: 'p',
     });
     try {
-      // Positive: pin the real leaf SPKI + trust its CA.
+      // Positive: pin the real leaf SHA-256 fingerprint + trust its CA.
       const ok = createTransport({
         host: 'localhost',
         port: server.port,
         secure: 'implicit',
         auth: { user: 'u@example.com', pass: 'p' },
-        tls: { ca: cert.ca, pinnedSpkiSha256: cert.spkiSha256 },
+        tls: { ca: cert.ca, pinnedCertSha256: cert.fingerprint256 },
         transportFactory: nodeFactory,
       });
       await expect(ok.verify()).resolves.toBeDefined();
 
-      // Negative: pin a different (attacker) SPKI; even with the CA trusted the
-      // pin must reject.
+      // Negative: pin a different (attacker) fingerprint; even with the CA
+      // trusted the pin must reject.
       const bad = createTransport({
         host: 'localhost',
         port: server.port,
         secure: 'implicit',
         auth: { user: 'u@example.com', pass: 'p' },
-        tls: { ca: cert.ca, pinnedSpkiSha256: attacker.spkiSha256 },
+        tls: { ca: cert.ca, pinnedCertSha256: attacker.fingerprint256 },
         transportFactory: nodeFactory,
       });
       await expect(bad.verify()).rejects.toBeInstanceOf(SmtpSecurityError);

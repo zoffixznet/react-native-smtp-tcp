@@ -18,9 +18,12 @@ const suite = hasDist ? describe : describe.skip;
 suite('T-PACK-MANIFEST: the tarball ships only the allowlist', () => {
   const files = hasDist ? packFiles() : [];
 
-  it('contains only dist, README, LICENSE, and package.json', () => {
+  it('contains only dist, patches, the plugin entry, README, LICENSE, and package.json', () => {
     for (const f of files) {
-      const ok = f.startsWith('dist/') || ['README.md', 'LICENSE', 'package.json'].includes(f);
+      const ok =
+        f.startsWith('dist/') ||
+        f.startsWith('patches/') ||
+        ['README.md', 'LICENSE', 'package.json', 'app.plugin.js'].includes(f);
       expect(ok, `unexpected file in tarball: ${f}`).toBe(true);
     }
   });

@@ -131,10 +131,10 @@ describe('Node adapter and default factory', () => {
         t.once('secureConnect', () => resolve());
         t.once('error', reject);
       });
-      const peer = t.getPeerCertificate?.();
+      const peer = await t.getPeerCertificate?.();
       expect(peer).toBeDefined();
-      expect(peer?.subjectAltNames).toContain('localhost');
-      expect(peer?.pubkey).toBeDefined();
+      expect(peer?.fingerprint256).toMatch(/^[0-9A-F:]+$/);
+      expect(typeof peer?.pubkey).toBe('string');
       expect(t.getProtocol?.()).toMatch(/TLS/);
       t.destroy();
     } finally {
@@ -172,7 +172,7 @@ describe('Node adapter and default factory', () => {
     stubImplicit.destroy();
   });
 
-  it('wraps a stub socket and maps getPeerCertificate/getProtocol fields', () => {
+  it('wraps a stub socket and maps getPeerCertificate/getProtocol fields', async () => {
     // A stub socket standing in for a tls.TLSSocket, exercising the field-mapping
     // branches (present and absent) without a live handshake.
     const events: Record<string, unknown> = {};
@@ -186,12 +186,9 @@ describe('Node adapter and default factory', () => {
       removeListener: () => stub,
       removeAllListeners: () => stub,
       getPeerCertificate: () => ({
-        raw: Buffer.from([1, 2, 3]),
         pubkey: Buffer.from([4, 5, 6]),
         fingerprint: 'AA:BB',
         fingerprint256: 'CC:DD',
-        subjectaltname: 'DNS:a.example, IP Address:192.0.2.1',
-        subject: { CN: 'a.example' },
       }),
       getProtocol: () => 'TLSv1.3',
     };
@@ -200,15 +197,15 @@ describe('Node adapter and default factory', () => {
     // end with data and without data.
     t.end('bye');
     t.end();
-    const peer = t.getPeerCertificate!();
-    expect(peer?.subjectAltNames).toEqual(['a.example', '192.0.2.1']);
-    expect(peer?.commonName).toBe('a.example');
-    expect(peer?.raw).toBeInstanceOf(Uint8Array);
-    expect(peer?.pubkey).toBeInstanceOf(Uint8Array);
+    const peer = await t.getPeerCertificate!();
+    expect(peer?.fingerprint).toBe('AA:BB');
+    expect(peer?.fingerprint256).toBe('CC:DD');
+    // The public key is base64-encoded.
+    expect(peer?.pubkey).toBe(Buffer.from([4, 5, 6]).toString('base64'));
     expect(t.getProtocol!()).toBe('TLSv1.3');
   });
 
-  it('handles a peer certificate that lacks raw/pubkey/SAN/CN', () => {
+  it('handles a peer certificate that lacks a pubkey', async () => {
     const stub = {
       write: () => true,
       end: () => undefined,
@@ -218,16 +215,14 @@ describe('Node adapter and default factory', () => {
       once: () => stub,
       removeListener: () => stub,
       removeAllListeners: () => stub,
-      // A minimal cert object: no raw, no pubkey, no SAN, no subject.CN.
+      // A minimal cert object: a fingerprint but no pubkey.
       getPeerCertificate: () => ({ fingerprint: 'AA' }),
       getProtocol: () => null,
     };
     const t = wrapNodeSocket(stub as never);
-    const peer = t.getPeerCertificate!();
-    expect(peer?.raw).toBeUndefined();
+    const peer = await t.getPeerCertificate!();
+    expect(peer?.fingerprint).toBe('AA');
     expect(peer?.pubkey).toBeUndefined();
-    expect(peer?.commonName).toBeUndefined();
-    expect(peer?.subjectAltNames).toEqual([]);
     // getProtocol returning null maps to undefined.
     expect(t.getProtocol!()).toBeUndefined();
   });

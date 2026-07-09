@@ -12,7 +12,7 @@ module.exports = {
     node: true,
     es2020: true,
   },
-  ignorePatterns: ['dist/', 'node_modules/', 'coverage/', '*.cjs', 'scripts/'],
+  ignorePatterns: ['dist/', 'node_modules/', 'coverage/', '*.cjs', 'scripts/', 'app.plugin.js'],
   rules: {
     '@typescript-eslint/no-explicit-any': 'off',
     '@typescript-eslint/explicit-module-boundary-types': 'off',

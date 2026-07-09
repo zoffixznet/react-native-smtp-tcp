@@ -12,14 +12,11 @@ import type { ResolvedConfig, TransportOptions } from './config';
 import { SmtpClient } from './protocol/client';
 import { buildMessage } from './message/builder';
 import type { MailMessage } from './message/builder';
-import { computeSpkiSha256, pinMatches } from './protocol/pinning';
-import { verifyHostname } from './hostname';
-import { isIP } from './net-util';
+import { certFingerprintMatches } from './protocol/pinning';
 import { SmtpSecurityError } from './protocol/errors';
 import type {
   SmtpTransport,
   TlsUpgradeOptions,
-  PeerCertificate,
   Capabilities,
 } from './protocol/types';
 import {
@@ -69,40 +66,6 @@ export interface SendInfo {
 export interface TransportFactory {
   connectPlain(config: ResolvedConfig, tls: TlsUpgradeOptions): SmtpTransport;
   connectImplicitTls(config: ResolvedConfig, tls: TlsUpgradeOptions): SmtpTransport;
-}
-
-/**
- * SHA-256 via the platform crypto. Resolves a WebCrypto-style subtle digest is
- * async, so this uses Node's crypto when present (tests, and RN with a polyfill)
- * via a guarded lazy require, and otherwise throws a clear error when pinning is
- * requested on a platform without a synchronous SHA-256. Pinning is opt-in, so
- * this only matters when a pin is configured.
- */
-function sha256(data: Uint8Array): Uint8Array {
-  const nodeCrypto = tryLoadNodeCrypto();
-  if (nodeCrypto) {
-    return new Uint8Array(nodeCrypto.createHash('sha256').update(data).digest());
-  }
-  throw new SmtpSecurityError(
-    'SPKI pinning requires a synchronous SHA-256 implementation that is not available on this platform',
-  );
-}
-
-type NodeCrypto = typeof import('crypto');
-let nodeCryptoLookup: NodeCrypto | null | undefined;
-function tryLoadNodeCrypto(): NodeCrypto | null {
-  if (nodeCryptoLookup !== undefined) return nodeCryptoLookup;
-  try {
-    if (typeof require === 'function') {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      nodeCryptoLookup = require('crypto') as NodeCrypto;
-    } else {
-      nodeCryptoLookup = null;
-    }
-  } catch {
-    nodeCryptoLookup = null;
-  }
-  return nodeCryptoLookup;
 }
 
 /** The default transport factory. The RN adapter is loaded lazily so this
@@ -310,57 +273,19 @@ export class Transport {
   }
 
   /**
-   * Post-handshake channel verification: hostname identity (defense in depth,
-   * and the primary check for bare-IP hosts) and optional SPKI pinning. Throws a
-   * SmtpSecurityError to reject.
+   * Post-handshake channel checks. The TLS handshake itself enforces the
+   * certificate chain and hostname (Node's rejectUnauthorized on the reference
+   * path; native endpoint identification on device), so this only applies the
+   * optional certificate-fingerprint pin. When a pin is configured and does not
+   * match, it throws a SmtpSecurityError so the client aborts before sending.
    */
-  private verifyTlsChannel(transport: SmtpTransport): void {
-    const cert = transport.getPeerCertificate?.();
-
-    // Hostname identity. For a bare-IP host, the Node/RN socket cannot perform
-    // SNI-based identity checks, so this explicit check is authoritative.
-    this.verifyIdentity(cert);
-
-    // SPKI pinning, if configured.
-    if (this.config.tls.pinnedSpkiSha256) {
-      const computed = computeSpkiSha256(cert, sha256);
-      if (!pinMatches(computed, this.config.tls.pinnedSpkiSha256)) {
-        throw new SmtpSecurityError('the server certificate does not match the configured SPKI pin');
-      }
-    }
-  }
-
-  private verifyIdentity(cert: PeerCertificate | undefined): void {
-    const expected = this.config.servername;
-    // When the host is a bare IP we must have a certificate and matching SAN.
-    if (isIP(this.config.host)) {
-      if (!cert || !cert.subjectAltNames) {
-        throw new SmtpSecurityError(
-          'cannot verify the server identity for a bare-IP host (no certificate details available)',
-        );
-      }
-      if (!verifyHostname(expected, cert.subjectAltNames, cert.commonName)) {
-        throw new SmtpSecurityError(
-          `the server certificate does not match the expected identity "${expected}"`,
-        );
-      }
-      return;
-    }
-    // Named hosts. This check is fail-closed and load-bearing on the RN/device
-    // path, where the native socket does NOT verify the hostname: the adapter
-    // parses the leaf DER to populate subjectAltNames/commonName, and this check
-    // is the only hostname verification in that stack. It must never silently
-    // pass by relying on the socket to have enforced identity.
-    if (!cert || cert.subjectAltNames === undefined) {
-      // No parseable certificate identity was available (e.g. the leaf could not
-      // be parsed). Fail closed rather than trusting an unverified channel.
+  private async verifyTlsChannel(transport: SmtpTransport): Promise<void> {
+    const pin = this.config.tls.pinnedCertSha256;
+    if (!pin) return;
+    const cert = await transport.getPeerCertificate?.();
+    if (!certFingerprintMatches(cert, pin)) {
       throw new SmtpSecurityError(
-        `cannot verify the server identity for "${expected}" (no usable certificate identity available)`,
-      );
-    }
-    if (!verifyHostname(expected, cert.subjectAltNames, cert.commonName)) {
-      throw new SmtpSecurityError(
-        `the server certificate does not match the expected identity "${expected}"`,
+        'the server certificate does not match the configured certificate pin',
       );
     }
   }

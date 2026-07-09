@@ -69,10 +69,12 @@ export interface ClientOptions {
   logger?: Logger;
   tlsUpgradeOptions: TlsUpgradeOptions;
   /**
-   * Called after the TLS handshake with the transport, so the caller can run
-   * hostname and pinning checks. Must throw (a SmtpSecurityError) to reject.
+   * Called after the TLS handshake with the transport, so the caller can run the
+   * optional certificate-fingerprint pin check. May be async (the native peer
+   * certificate is fetched asynchronously). Must throw (a SmtpSecurityError) to
+   * reject.
    */
-  verifyTlsChannel: (transport: SmtpTransport) => void;
+  verifyTlsChannel: (transport: SmtpTransport) => void | Promise<void>;
 }
 
 /** Internal channel-security state. */
@@ -138,7 +140,7 @@ export class SmtpClient {
     if (this.opts.secure === 'implicit') {
       await this.waitForSecureConnect();
       this.channel.encrypted = true;
-      this.runTlsChannelVerification();
+      await this.runTlsChannelVerification();
       await this.readGreeting();
       await this.ehlo();
     } else {
@@ -389,23 +391,23 @@ export class SmtpClient {
     await this.waitForSecureConnect();
     this.channel.encrypted = true;
 
-    // Post-handshake identity and pinning checks.
-    this.runTlsChannelVerification();
+    // Post-handshake pin check (if configured).
+    await this.runTlsChannelVerification();
 
     // Discard ALL pre-TLS capability knowledge and re-issue EHLO inside TLS.
     this.capabilities = null;
     await this.ehlo();
   }
 
-  private runTlsChannelVerification(): void {
+  private async runTlsChannelVerification(): Promise<void> {
     try {
-      // Post-handshake protocol-version floor. On the RN/device path the native
+      // Post-handshake protocol-version floor. On the device path the native
       // module offers no pre-handshake min-version knob, so this is the only
       // place a downgraded handshake (TLS 1.0/1.1) can be refused. It is
       // best-effort: it only fires when the transport can report the negotiated
       // version, and it never lowers the Node path's pre-handshake enforcement.
       this.enforceMinProtocolVersion();
-      this.opts.verifyTlsChannel(this.transport);
+      await this.opts.verifyTlsChannel(this.transport);
       this.channel.validated = true;
     } catch (err) {
       this.channel.validated = false;

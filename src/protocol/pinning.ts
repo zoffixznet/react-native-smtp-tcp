@@ -1,49 +1,46 @@
 /**
- * SPKI pinning comparison. Pure logic over a peer certificate view provided by
- * the adapter. The adapter supplies the DER-encoded SubjectPublicKeyInfo (or a
- * sha256 fingerprint) after the handshake; this module computes/compares the
- * base64 SHA-256 of the SPKI and reports a match.
+ * Optional certificate-fingerprint pinning. Pure comparison over the peer
+ * certificate view the adapter exposes after the handshake.
  *
- * Hashing uses the platform crypto (Node crypto / RN global). No hand-rolled
- * crypto. If no SPKI is available from the platform, pinning cannot be enforced
- * and the caller treats that as a failure when a pin was requested.
+ * The pin is the SHA-256 fingerprint of the leaf certificate. It is compared
+ * against the platform's `fingerprint256` field. Both the configured pin and the
+ * platform value are normalized to lowercase hex without separators before a
+ * length-checked, non-short-circuiting comparison, so either colon-separated hex
+ * or a plain hex string is accepted.
+ *
+ * Pinning is layered on top of (never instead of) the default chain and hostname
+ * verification the TLS handshake performs. It is entirely optional.
  */
 
-import { Buffer } from 'buffer';
 import type { PeerCertificate } from './types';
 
-/** Injected SHA-256 function so the engine stays platform-agnostic. */
-export type Sha256 = (data: Uint8Array) => Uint8Array;
-
 /**
- * Compute the base64 SHA-256 of the certificate's SPKI, if available.
- * Returns null when the platform did not expose a usable public key.
+ * Normalize a fingerprint to lowercase hex with no separators. Returns null when
+ * the input is empty or contains no hex digits.
  */
-export function computeSpkiSha256(
-  cert: PeerCertificate | undefined,
-  sha256: Sha256,
-): string | null {
-  if (!cert) return null;
-  if (cert.pubkey && cert.pubkey.length > 0) {
-    return Buffer.from(sha256(cert.pubkey)).toString('base64');
-  }
-  return null;
+export function normalizeFingerprint(value: string | undefined | null): string | null {
+  if (!value) return null;
+  const hex = value.replace(/[^0-9a-fA-F]/g, '').toLowerCase();
+  if (hex.length === 0) return null;
+  return hex;
 }
 
 /**
- * Compare a computed SPKI hash against the configured pin. Both are base64
- * strings. Comparison is constant-length safe (lengths compared first, then a
- * byte-wise comparison that does not short-circuit on the first difference).
+ * Compare the peer certificate's SHA-256 fingerprint against the configured pin.
+ * Returns false when either side is missing or unparseable. The comparison is
+ * length-checked and does not short-circuit on the first differing character.
  */
-export function pinMatches(computed: string | null, configured: string): boolean {
-  if (computed === null) return false;
-  const a = Buffer.from(computed, 'base64');
-  const b = Buffer.from(configured, 'base64');
-  if (a.length === 0 || b.length === 0) return false;
-  if (a.length !== b.length) return false;
+export function certFingerprintMatches(
+  cert: PeerCertificate | undefined,
+  configuredPin: string,
+): boolean {
+  const expected = normalizeFingerprint(configuredPin);
+  const actual = normalizeFingerprint(cert?.fingerprint256);
+  if (expected === null || actual === null) return false;
+  if (expected.length !== actual.length) return false;
   let diff = 0;
-  for (let i = 0; i < a.length; i++) {
-    diff |= a[i] ^ b[i];
+  for (let i = 0; i < expected.length; i++) {
+    diff |= expected.charCodeAt(i) ^ actual.charCodeAt(i);
   }
   return diff === 0;
 }

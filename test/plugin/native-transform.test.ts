@@ -6,7 +6,8 @@
  * SSLSocket with the real hostname on both the implicit-TLS and STARTTLS paths.
  */
 import { describe, it, expect } from 'vitest';
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync, existsSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'fs';
+import { tmpdir } from 'os';
 import { join } from 'path';
 import {
   applyAndroidHostnameVerification,
@@ -156,47 +157,45 @@ describe('plugin file helpers', () => {
   it('transformAndroidClientFile is a no-op on an already-verified file', () => {
     // Build a temp copy of a transformed file and confirm re-running reports no
     // change (idempotent), without needing the native module.
-    const os = require('os');
-    const fs = require('fs');
-    const dir = fs.mkdtempSync(join(os.tmpdir(), 'rnsmtp-plugin-'));
+    const dir = mkdtempSync(join(tmpdir(), 'rnsmtp-plugin-'));
     const file = join(dir, 'TcpSocketClient.java');
     try {
       const transformed = applyAndroidHostnameVerification(SYNTHETIC_STOCK).contents;
-      fs.writeFileSync(file, transformed, 'utf8');
+      writeFileSync(file, transformed, 'utf8');
       const res = transformAndroidClientFile(file);
       expect(res.changed).toBe(false);
       expect(res.applied).toEqual([]);
     } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 
   it('transformAndroidClientFile rewrites a stock file in place', () => {
-    const os = require('os');
-    const fs = require('fs');
-    const dir = fs.mkdtempSync(join(os.tmpdir(), 'rnsmtp-plugin-'));
+    const dir = mkdtempSync(join(tmpdir(), 'rnsmtp-plugin-'));
     const file = join(dir, 'TcpSocketClient.java');
     try {
-      fs.writeFileSync(file, SYNTHETIC_STOCK, 'utf8');
+      writeFileSync(file, SYNTHETIC_STOCK, 'utf8');
       const res = transformAndroidClientFile(file);
       expect(res.changed).toBe(true);
-      const out = fs.readFileSync(file, 'utf8');
+      const out = readFileSync(file, 'utf8');
       expect(out).toContain('setEndpointIdentificationAlgorithm("HTTPS")');
     } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 });
 
 describe('Expo plugin wrapper (with an injected config-plugins loader)', () => {
   it('registers an android dangerous mod and runs the transform', async () => {
-    const os = require('os');
-    const fs = require('fs');
-    const projectRoot = fs.mkdtempSync(join(os.tmpdir(), 'rnsmtp-proj-'));
-    const clientDir = join(projectRoot, 'node_modules', ...('react-native-tcp-socket/' + ANDROID_CLIENT_RELATIVE_PATH).split('/').slice(0, -1));
-    fs.mkdirSync(clientDir, { recursive: true });
+    const projectRoot = mkdtempSync(join(tmpdir(), 'rnsmtp-proj-'));
+    const clientDir = join(
+      projectRoot,
+      'node_modules',
+      ...('react-native-tcp-socket/' + ANDROID_CLIENT_RELATIVE_PATH).split('/').slice(0, -1),
+    );
+    mkdirSync(clientDir, { recursive: true });
     const clientFile = join(clientDir, 'TcpSocketClient.java');
-    fs.writeFileSync(clientFile, SYNTHETIC_STOCK, 'utf8');
+    writeFileSync(clientFile, SYNTHETIC_STOCK, 'utf8');
     try {
       let registered: [string, (c: any) => Promise<any>] | null = null;
       const fakeLoader = () => ({
@@ -211,23 +210,21 @@ describe('Expo plugin wrapper (with an injected config-plugins loader)', () => {
       expect(registered![0]).toBe('android');
       // Invoke the registered mod and confirm it transforms the file.
       await registered![1]({ modRequest: { projectRoot } });
-      const transformed = fs.readFileSync(clientFile, 'utf8');
+      const transformed = readFileSync(clientFile, 'utf8');
       expect(transformed).toContain('setEndpointIdentificationAlgorithm("HTTPS")');
     } finally {
-      fs.rmSync(projectRoot, { recursive: true, force: true });
+      rmSync(projectRoot, { recursive: true, force: true });
     }
   });
 
   it('runAndroidMod is a no-op when the module is not installed', async () => {
-    const os = require('os');
-    const fs = require('fs');
-    const projectRoot = fs.mkdtempSync(join(os.tmpdir(), 'rnsmtp-empty-'));
+    const projectRoot = mkdtempSync(join(tmpdir(), 'rnsmtp-empty-'));
     try {
       const cfg = { modRequest: { projectRoot }, marker: 1 };
       const out = await runAndroidMod(cfg as any);
       expect((out as any).marker).toBe(1);
     } finally {
-      fs.rmSync(projectRoot, { recursive: true, force: true });
+      rmSync(projectRoot, { recursive: true, force: true });
     }
   });
 });

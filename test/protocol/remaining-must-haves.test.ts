@@ -1,14 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { Buffer } from 'buffer';
 import { FakeSocket } from '../helpers/fake-socket';
 import { driveFake } from '../helpers/fake-driver';
 import { makeClient } from '../helpers/make-client';
 import { buildMessage } from '../../src/message/builder';
-import { computeSpkiSha256, pinMatches } from '../../src/protocol/pinning';
+import { certFingerprintMatches } from '../../src/protocol/pinning';
 import { execFileSync } from 'child_process';
 import { existsSync } from 'fs';
 import { join } from 'path';
-import { createHash } from 'crypto';
 import { SmtpMessageError, SmtpProtocolError } from '../../src/protocol/errors';
 
 const CTX = { smtpUtf8: false, eightBitMime: false };
@@ -86,11 +84,9 @@ describe('T-FAIL-CLOSED-ABORT (SEC-15)', () => {
     // Through the public API, a message with an injected subject is rejected at
     // build time, before any transaction command reaches the socket.
     const { createTransport } = await import('../../src/index');
-    // A peer certificate whose SAN matches the host, so the named-host identity
-    // check passes and the build-time rejection remains the failure point.
-    const sock = new FakeSocket({
-      peerCertificate: { subjectAltNames: ['localhost'], commonName: 'localhost' },
-    });
+    // No pin is configured, so the completed handshake is authoritative and the
+    // build-time message rejection remains the failure point.
+    const sock = new FakeSocket();
     startImplicit(sock);
     const transport = createTransport({
       host: 'localhost',
@@ -175,21 +171,22 @@ describe('T-PIPELINING-REPLY-COUNT (COR-15)', () => {
   });
 });
 
-describe('T-TRUST-LIMIT (SEC-8): pinning comparison and destroy-on-mismatch', () => {
-  const sha256 = (d: Uint8Array) => new Uint8Array(createHash('sha256').update(d).digest());
+describe('T-TRUST-LIMIT: certificate-pin comparison and destroy-on-mismatch', () => {
+  it('matches and rejects a fingerprint pin over the async cert shape', () => {
+    const good = { fingerprint256: 'AA:BB:CC:DD' };
+    const bad = { fingerprint256: '11:22:33:44' };
+    expect(certFingerprintMatches(good, 'aabbccdd')).toBe(true);
+    expect(certFingerprintMatches(bad, 'aabbccdd')).toBe(false);
+  });
 
-  it('destroys the socket when the SPKI pin does not match', async () => {
-    // The real pin check runs in Transport.verifyTlsChannel; here we prove the
-    // pure comparison rejects a mismatch and the peer-cert accessor is honored.
-    const goodKey = new Uint8Array([1, 2, 3, 4]);
-    const badKey = new Uint8Array([9, 9, 9, 9]);
-    const configured = Buffer.from(sha256(goodKey)).toString('base64');
-    expect(pinMatches(computeSpkiSha256({ pubkey: goodKey }, sha256), configured)).toBe(true);
-    expect(pinMatches(computeSpkiSha256({ pubkey: badKey }, sha256), configured)).toBe(false);
-
+  it('destroys the socket when the certificate pin does not match', async () => {
     // A socket whose peer cert does not match the pin is destroyed by the client
     // during channel verification (proven end to end in the TLS validation suite).
-    const sock = new FakeSocket({ peerCertificate: { pubkey: badKey } });
+    const configured = 'aa:bb:cc:dd';
+    const sock = new FakeSocket({
+      peerCertificate: { fingerprint256: '11:22:33:44' },
+      asyncPeerCertificate: true,
+    });
     let destroyed = false;
     const orig = sock.destroy.bind(sock);
     sock.destroy = (e?: Error) => {
@@ -203,9 +200,9 @@ describe('T-TRUST-LIMIT (SEC-8): pinning comparison and destroy-on-mismatch', ()
     const client = makeClient(sock, {
       secure: 'implicit',
       requireTLS: true,
-      verifyTlsChannel: (t) => {
-        const cert = t.getPeerCertificate?.();
-        if (!pinMatches(computeSpkiSha256(cert, sha256), configured)) {
+      verifyTlsChannel: async (t) => {
+        const cert = await t.getPeerCertificate?.();
+        if (!certFingerprintMatches(cert, configured)) {
           throw new (class extends Error {})('pin mismatch');
         }
       },

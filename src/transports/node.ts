@@ -12,6 +12,7 @@
 
 import net from 'net';
 import tls from 'tls';
+import { Buffer } from 'buffer';
 import type { PeerCertificate, SmtpTransport, TlsUpgradeOptions } from '../protocol/types';
 
 /** Options for opening a Node-backed connection. */
@@ -106,22 +107,10 @@ class NodeTransport implements SmtpTransport {
     if (typeof s.getPeerCertificate !== 'function') return undefined;
     const cert = s.getPeerCertificate(true);
     if (!cert || Object.keys(cert).length === 0) return undefined;
-    const altNames: string[] = [];
-    if (typeof cert.subjectaltname === 'string') {
-      // Format: "DNS:example.com, DNS:*.example.com, IP Address:192.0.2.1"
-      for (const entry of cert.subjectaltname.split(',')) {
-        const trimmed = entry.trim();
-        const colon = trimmed.indexOf(':');
-        if (colon !== -1) altNames.push(trimmed.slice(colon + 1).trim());
-      }
-    }
     return {
-      raw: cert.raw ? new Uint8Array(cert.raw) : undefined,
       fingerprint: cert.fingerprint,
       fingerprint256: cert.fingerprint256,
-      pubkey: cert.pubkey ? new Uint8Array(cert.pubkey) : undefined,
-      subjectAltNames: altNames,
-      commonName: cert.subject && typeof cert.subject.CN === 'string' ? cert.subject.CN : undefined,
+      pubkey: cert.pubkey ? Buffer.from(cert.pubkey).toString('base64') : undefined,
     };
   }
 

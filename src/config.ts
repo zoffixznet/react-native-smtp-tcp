@@ -11,8 +11,12 @@ import { isIP } from './net-util';
 export interface TlsOptions {
   /** Inline CA PEM string (preferred) for a private/self-signed server. */
   ca?: string;
-  /** Optional SPKI SHA-256 pin (base64), enforced post-handshake. */
-  pinnedSpkiSha256?: string;
+  /**
+   * Optional leaf certificate SHA-256 fingerprint pin, checked after the
+   * handshake in addition to the default chain and hostname verification.
+   * Accepts colon-separated or plain hex.
+   */
+  pinnedCertSha256?: string;
   /** Expected identity when the host is a bare IP (required in that case). */
   servername?: string;
   /** Minimum TLS version. Defaults to TLSv1.2; never lower. */
@@ -122,8 +126,8 @@ export function resolveConfig(options: TransportOptions): ResolvedConfig {
     }
     if (options.tls.cert !== undefined) tls.cert = requireString(options.tls.cert, 'tls.cert');
     if (options.tls.key !== undefined) tls.key = requireString(options.tls.key, 'tls.key');
-    if (options.tls.pinnedSpkiSha256 !== undefined) {
-      tls.pinnedSpkiSha256 = requireString(options.tls.pinnedSpkiSha256, 'tls.pinnedSpkiSha256');
+    if (options.tls.pinnedCertSha256 !== undefined) {
+      tls.pinnedCertSha256 = requireString(options.tls.pinnedCertSha256, 'tls.pinnedCertSha256');
     }
     if (options.tls.servername !== undefined) {
       tls.servername = requireString(options.tls.servername, 'tls.servername');

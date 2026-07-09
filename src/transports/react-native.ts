@@ -2,20 +2,24 @@
  * React Native adapter over `react-native-tcp-socket`.
  *
  * This is the only file that imports the native transport. It is kept as thin as
- * possible over the verified v6.4.1 API. It cannot be executed in a Node test
- * environment (no native module), so on-device validation is a documented known
- * limitation; every other layer is proven in Node.
+ * possible over the v6.4.1 API. It cannot be executed in a Node test environment
+ * (no native module), so on-device behavior is validated on a real device by the
+ * consuming app; every other layer runs in Node.
+ *
+ * The native transport verifies the certificate chain and, once the shipped
+ * config plugin / patch is applied at build time, the hostname. This adapter
+ * therefore relies on a correct native handshake and only exposes the peer
+ * certificate for the optional certificate-fingerprint pin.
  *
  * Drain-before-wrap: the protocol engine asserts an empty read buffer and
  * detaches the plaintext data listener before calling {@link upgradeToTLS}. This
  * adapter's upgrade just constructs `new TLSSocket(socket, opts)` per the
- * transport's documented STARTTLS mechanism.
+ * transport's STARTTLS mechanism.
  */
 
 import TcpSocket, { TLSSocket } from 'react-native-tcp-socket';
 import type { TcpSocket as RnSocket } from 'react-native-tcp-socket';
 import type { PeerCertificate, SmtpTransport, TlsUpgradeOptions } from '../protocol/types';
-import { parseCertIdentity } from '../x509';
 
 /** Options for opening a device connection. */
 export interface RnConnectOptions {
@@ -74,32 +78,21 @@ class RnTransport implements SmtpTransport {
     return new RnTransport(tlsSocket as unknown as RnSocket);
   }
 
-  getPeerCertificate(): PeerCertificate | undefined {
+  /**
+   * Fetch the peer certificate for the optional pin check. The native module
+   * resolves this asynchronously, so it is awaited. The returned shape carries
+   * only the fingerprints and the base64 public key the pin needs; hostname
+   * identity is enforced by the native handshake, not here.
+   */
+  async getPeerCertificate(): Promise<PeerCertificate | undefined> {
     const s = this.socket as RnSocket;
     if (typeof s.getPeerCertificate !== 'function') return undefined;
-    const cert = s.getPeerCertificate();
-    if (!cert) return undefined;
-    const raw = cert.raw ? new Uint8Array(cert.raw) : undefined;
-    // The native module returns raw DER but no parsed subjectAltName, so the
-    // library parses it here to recover the identity material the on-device
-    // hostname check needs. Without this, named-host identity would go
-    // unverified on Android (the native socket does not check the hostname).
-    let subjectAltNames: string[] | undefined;
-    let commonName: string | undefined;
-    if (raw) {
-      const id = parseCertIdentity(raw);
-      if (id) {
-        subjectAltNames = id.subjectAltNames;
-        commonName = id.commonName;
-      }
-    }
+    const cert = await s.getPeerCertificate();
+    if (!cert || typeof cert !== 'object') return undefined;
     return {
-      fingerprint: cert.fingerprint,
-      fingerprint256: cert.fingerprint256,
-      raw,
-      pubkey: cert.pubkey ? new Uint8Array(cert.pubkey) : undefined,
-      subjectAltNames,
-      commonName,
+      fingerprint: typeof cert.fingerprint === 'string' ? cert.fingerprint : undefined,
+      fingerprint256: typeof cert.fingerprint256 === 'string' ? cert.fingerprint256 : undefined,
+      pubkey: typeof cert.pubkey === 'string' ? cert.pubkey : undefined,
     };
   }
 

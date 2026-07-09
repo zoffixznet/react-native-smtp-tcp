@@ -14,6 +14,11 @@ import type { PeerCertificate, SmtpTransport, TlsUpgradeOptions } from '../../sr
 export interface FakeSocketOptions {
   /** A canned peer certificate returned by getPeerCertificate after upgrade. */
   peerCertificate?: PeerCertificate;
+  /**
+   * When true, getPeerCertificate resolves asynchronously (a Promise), matching
+   * the real react-native-tcp-socket native module shape.
+   */
+  asyncPeerCertificate?: boolean;
   /** When true, upgradeToTLS returns a new FakeSocket that emits secureConnect. */
   supportUpgrade?: boolean;
   /** A canned negotiated TLS protocol version returned by getProtocol(). */
@@ -68,7 +73,10 @@ export class FakeSocket extends EventEmitter implements SmtpTransport {
     return next;
   }
 
-  getPeerCertificate(): PeerCertificate | undefined {
+  getPeerCertificate(): Promise<PeerCertificate | undefined> | PeerCertificate | undefined {
+    if (this.opts.asyncPeerCertificate) {
+      return Promise.resolve(this.opts.peerCertificate);
+    }
     return this.opts.peerCertificate;
   }
 

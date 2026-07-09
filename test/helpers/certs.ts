@@ -21,12 +21,26 @@ export interface GeneratedCert {
   ca: string;
   /** Base64 SHA-256 of the leaf's SubjectPublicKeyInfo (for pin tests). */
   spkiSha256: string;
+  /** Colon-separated hex SHA-256 fingerprint of the leaf certificate. */
+  fingerprint256: string;
   /** Directory holding the generated files; call cleanup() to remove. */
   dir: string;
 }
 
 function openssl(args: string[], cwd: string): void {
   execFileSync('openssl', args, { cwd, stdio: 'pipe' });
+}
+
+/** Read the colon-separated hex SHA-256 fingerprint of a certificate. */
+function certFingerprint256(certPath: string, cwd: string): string {
+  const out = execFileSync(
+    'openssl',
+    ['x509', '-in', certPath, '-noout', '-fingerprint', '-sha256'],
+    { cwd, encoding: 'utf8' },
+  );
+  // Format: "SHA256 Fingerprint=AB:CD:...". Keep the hex part.
+  const eq = out.indexOf('=');
+  return out.slice(eq + 1).trim();
 }
 
 /** Compute the base64 SHA-256 of a certificate's SPKI using openssl. */
@@ -94,6 +108,7 @@ ${sanConfig}
       key,
       ca: cert,
       spkiSha256: spkiHash(join(dir, 'leaf.crt'), dir),
+      fingerprint256: certFingerprint256(join(dir, 'leaf.crt'), dir),
       dir,
     };
   }
@@ -125,6 +140,7 @@ ${sanConfig}
     key: readFileSync(join(dir, 'leaf.key'), 'utf8'),
     ca: readFileSync(join(dir, 'ca.crt'), 'utf8'),
     spkiSha256: spkiHash(join(dir, 'leaf.crt'), dir),
+    fingerprint256: certFingerprint256(join(dir, 'leaf.crt'), dir),
     dir,
   };
 }
