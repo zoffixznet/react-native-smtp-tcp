@@ -61,7 +61,8 @@
     "test": "vitest run",
     "cover": "vitest run --coverage",
     "pack-check": "node scripts/pack-check.mjs",
-    "leak-scan": "node scripts/leak-scan.mjs"
+    "leak-scan": "node scripts/leak-scan.mjs",
+    "prepack": "npm run build"
   },
   "peerDependencies": {
     "react-native": ">=0.60.0",
