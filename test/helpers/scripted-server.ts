@@ -12,7 +12,7 @@
 
 import net from 'net';
 import tls from 'tls';
-import { AddressInfo } from 'net';
+import type { AddressInfo } from 'net';
 
 export interface ScriptedConnection {
   /** Send raw bytes to the client. */

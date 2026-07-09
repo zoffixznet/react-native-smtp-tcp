@@ -659,12 +659,21 @@ export class SmtpClient {
   }
 
   /** Assign the pending handler, delivering a queued reply immediately if one
-   * is already available so no reply is lost to a scheduling race. */
+   * is already available so no reply is lost to a scheduling race. If the
+   * connection already closed, reject at once rather than waiting forever. */
   private setPending(p: Pending): void {
     const queued = this.replyQueue.shift();
     if (queued !== undefined) {
       this.clearIdleTimer();
       p.resolve(queued);
+      return;
+    }
+    if (this.closed) {
+      this.clearIdleTimer();
+      p.reject(
+        this.closedError ??
+          new SmtpConnectionError('connection closed before the reply completed'),
+      );
       return;
     }
     this.pending = p;
