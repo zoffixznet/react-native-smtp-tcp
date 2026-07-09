@@ -85,6 +85,18 @@ class RnTransport implements SmtpTransport {
       pubkey: cert.pubkey ? new Uint8Array(cert.pubkey) : undefined,
     };
   }
+
+  /**
+   * Best-effort negotiated TLS protocol version. The native TLSSocket exposes
+   * getProtocol() post-handshake on platforms that support it; when it is
+   * unavailable this returns undefined and the engine's floor check is a no-op.
+   */
+  getProtocol(): string | undefined {
+    const s = this.socket as RnSocket;
+    if (typeof s.getProtocol !== 'function') return undefined;
+    const v = s.getProtocol();
+    return v ?? undefined;
+  }
 }
 
 /**

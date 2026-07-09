@@ -399,6 +399,12 @@ export class SmtpClient {
 
   private runTlsChannelVerification(): void {
     try {
+      // Post-handshake protocol-version floor. On the RN/device path the native
+      // module offers no pre-handshake min-version knob, so this is the only
+      // place a downgraded handshake (TLS 1.0/1.1) can be refused. It is
+      // best-effort: it only fires when the transport can report the negotiated
+      // version, and it never lowers the Node path's pre-handshake enforcement.
+      this.enforceMinProtocolVersion();
       this.opts.verifyTlsChannel(this.transport);
       this.channel.validated = true;
     } catch (err) {
@@ -408,6 +414,23 @@ export class SmtpClient {
       if (err instanceof SmtpSecurityError) throw err;
       throw new SmtpSecurityError(
         `TLS channel verification failed: ${(err as Error).message}`,
+      );
+    }
+  }
+
+  /**
+   * Refuse a negotiated TLS version below the configured minimum. This gives the
+   * RN/device transport a post-handshake floor it otherwise lacks (the native
+   * module cannot set minVersion pre-handshake). When the transport does not
+   * report a protocol, this is a no-op (best effort).
+   */
+  private enforceMinProtocolVersion(): void {
+    const min = this.opts.tlsUpgradeOptions.minVersion;
+    const negotiated = this.transport.getProtocol?.();
+    if (!min || !negotiated) return;
+    if (tlsVersionRank(negotiated) < tlsVersionRank(min)) {
+      throw new SmtpSecurityError(
+        `the negotiated TLS version ${negotiated} is below the required minimum ${min}`,
       );
     }
   }
@@ -847,6 +870,27 @@ export class SmtpClient {
 }
 
 // --- Free helpers ----------------------------------------------------------
+
+/**
+ * Rank a TLS protocol string for a floor comparison. Higher is newer. Unknown or
+ * pre-1.2 versions rank at or below TLS 1.0 so they never satisfy a >=1.2 floor.
+ */
+export function tlsVersionRank(version: string): number {
+  switch (version) {
+    case 'TLSv1.3':
+      return 4;
+    case 'TLSv1.2':
+      return 3;
+    case 'TLSv1.1':
+      return 2;
+    case 'TLSv1':
+    case 'TLSv1.0':
+      return 1;
+    default:
+      // SSLv3 and anything unrecognized are treated as the weakest.
+      return 0;
+  }
+}
 
 /** Ensure the body ends with a CRLF before the terminating dot is appended. */
 function ensureTrailingCrlf(data: string): string {

@@ -16,6 +16,8 @@ export interface FakeSocketOptions {
   peerCertificate?: PeerCertificate;
   /** When true, upgradeToTLS returns a new FakeSocket that emits secureConnect. */
   supportUpgrade?: boolean;
+  /** A canned negotiated TLS protocol version returned by getProtocol(). */
+  protocol?: string;
 }
 
 export class FakeSocket extends EventEmitter implements SmtpTransport {
@@ -68,6 +70,10 @@ export class FakeSocket extends EventEmitter implements SmtpTransport {
 
   getPeerCertificate(): PeerCertificate | undefined {
     return this.opts.peerCertificate;
+  }
+
+  getProtocol(): string | undefined {
+    return this.opts.protocol;
   }
 
   // --- Test controls ------------------------------------------------------

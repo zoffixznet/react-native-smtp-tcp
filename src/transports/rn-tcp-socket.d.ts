@@ -16,6 +16,7 @@ declare module 'react-native-tcp-socket' {
     removeListener(event: string, listener: (...args: any[]) => void): TcpSocket;
     removeAllListeners(event?: string): TcpSocket;
     getPeerCertificate?(): any;
+    getProtocol?(): string | null | undefined;
     _id?: number;
     pending?: boolean;
     connecting?: boolean;
@@ -48,6 +49,7 @@ declare module 'react-native-tcp-socket' {
     removeListener(event: string, listener: (...args: any[]) => void): TcpSocket;
     removeAllListeners(event?: string): TcpSocket;
     getPeerCertificate(): any;
+    getProtocol?(): string | null | undefined;
   }
 
   export function connectTLS(
