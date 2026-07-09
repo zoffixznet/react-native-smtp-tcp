@@ -1,0 +1,87 @@
+{
+  "name": "react-native-smtp-tcp",
+  "version": "0.1.0",
+  "description": "Hardened, dependency-light SMTP submission client for React Native, speaking SMTP over a native TCP/TLS socket. Implicit TLS (465) and STARTTLS (587), AUTH PLAIN/LOGIN/XOAUTH2, MIME with attachments.",
+  "keywords": [
+    "react-native",
+    "smtp",
+    "email",
+    "mail",
+    "tls",
+    "starttls",
+    "smtps",
+    "submission",
+    "mime",
+    "oauth2",
+    "xoauth2"
+  ],
+  "license": "MIT",
+  "author": "Zoffix Znet",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zoffixznet/react-native-smtp-tcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/zoffixznet/react-native-smtp-tcp/issues"
+  },
+  "homepage": "https://github.com/zoffixznet/react-native-smtp-tcp#readme",
+  "main": "dist/cjs/index.js",
+  "module": "dist/esm/index.js",
+  "react-native": "dist/esm/index.js",
+  "types": "dist/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/types/index.d.ts",
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.js",
+      "react-native": "./dist/esm/index.js",
+      "default": "./dist/esm/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "clean": "rimraf dist",
+    "build:esm": "tsc -p tsconfig.build.json --module ESNext --moduleResolution Bundler --outDir dist/esm",
+    "build:cjs": "tsc -p tsconfig.build.json --module CommonJS --moduleResolution Node --outDir dist/cjs --verbatimModuleSyntax false",
+    "build:types": "tsc -p tsconfig.build.json --declaration --emitDeclarationOnly --outDir dist/types",
+    "build": "npm run clean && npm run build:esm && npm run build:cjs && npm run build:types && node scripts/fixup-cjs.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint . && node scripts/lint-no-disable-validation.mjs",
+    "test": "vitest run",
+    "cover": "vitest run --coverage",
+    "pack-check": "node scripts/pack-check.mjs",
+    "leak-scan": "node scripts/leak-scan.mjs"
+  },
+  "peerDependencies": {
+    "react-native": ">=0.60.0",
+    "react-native-tcp-socket": ">=6.0.0 <7.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react-native": {
+      "optional": false
+    },
+    "react-native-tcp-socket": {
+      "optional": false
+    }
+  },
+  "devDependencies": {
+    "@types/node": "20.14.10",
+    "@typescript-eslint/eslint-plugin": "7.16.0",
+    "@typescript-eslint/parser": "7.16.0",
+    "@vitest/coverage-v8": "1.6.0",
+    "eslint": "8.57.0",
+    "rimraf": "5.0.9",
+    "smtp-server": "3.19.2",
+    "typescript": "5.5.3",
+    "vitest": "1.6.0"
+  }
+}

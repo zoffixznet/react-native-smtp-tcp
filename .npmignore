@@ -1,0 +1,28 @@
+# Deny-list backing the package.json files allowlist. Only dist, README, and
+# LICENSE ship. Everything below is explicitly excluded even if a future files
+# entry widens.
+src/
+test/
+scripts/
+examples/
+docs/
+coverage/
+.github/
+node_modules/
+
+*.test.ts
+*.map
+tsconfig*.json
+vitest.config.ts
+.eslintrc.cjs
+Makefile
+CHANGELOG.md
+SECURITY.md
+
+.env
+.env.*
+.claude/
+.expo/
+.gitignore
+.npmrc
+*.tgz
