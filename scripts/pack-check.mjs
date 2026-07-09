@@ -17,13 +17,15 @@ const raw = execFileSync('npm', ['pack', '--dry-run', '--json'], { cwd: root, en
 const parsed = JSON.parse(raw);
 const files = parsed[0].files.map((f) => f.path).sort();
 
-// 2. Assert every shipped path is inside the allowlist (dist/, README, LICENSE).
-const allowedTop = new Set(['README.md', 'LICENSE', 'package.json']);
+// 2. Assert every shipped path is inside the allowlist (dist/, patches/, the
+// Expo plugin entry, README, LICENSE).
+const allowedTop = new Set(['README.md', 'LICENSE', 'package.json', 'app.plugin.js']);
 const violations = [];
 for (const f of files) {
   const top = f.split('/')[0];
   const inDist = f.startsWith('dist/');
-  if (!inDist && !allowedTop.has(f)) {
+  const inPatches = f.startsWith('patches/');
+  if (!inDist && !inPatches && !allowedTop.has(f)) {
     violations.push(f);
   }
   // Explicitly forbid known-sensitive paths even if a future files entry widens.

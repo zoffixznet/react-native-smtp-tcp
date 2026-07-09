@@ -1,0 +1,58 @@
+diff --git a/node_modules/react-native-tcp-socket/android/src/main/java/com/asterinet/react/tcpsocket/TcpSocketClient.java b/node_modules/react-native-tcp-socket/android/src/main/java/com/asterinet/react/tcpsocket/TcpSocketClient.java
+--- a/node_modules/react-native-tcp-socket/android/src/main/java/com/asterinet/react/tcpsocket/TcpSocketClient.java
++++ b/node_modules/react-native-tcp-socket/android/src/main/java/com/asterinet/react/tcpsocket/TcpSocketClient.java
+@@ -16,6 +16,7 @@
+ import java.util.concurrent.ExecutorService;
+ import java.util.concurrent.Executors;
+ 
++import javax.net.ssl.SSLParameters;
+ import javax.net.ssl.SSLSocket;
+ import javax.net.ssl.SSLSocketFactory;
+ 
+@@ -41,10 +42,10 @@
+ 
+     public void connect(Context context, String address, final Integer port, ReadableMap options, Network network, ReadableMap tlsOptions) throws IOException, GeneralSecurityException {
+         if (socket != null) throw new IOException("Already connected");
++        SSLSocketFactory sslFactory = null;
+         if (tlsOptions != null) {
+-            SSLSocketFactory ssf = getSSLSocketFactory(context, tlsOptions);
+-            socket = ssf.createSocket();
+-            ((SSLSocket) socket).setUseClientMode(true);
++            sslFactory = getSSLSocketFactory(context, tlsOptions);
++            socket = new Socket();
+         } else {
+             socket = new Socket();
+         }
+@@ -67,15 +68,30 @@
+         socket.bind(new InetSocketAddress(localInetAddress, localPort));
+         final int connectTimeout = options.hasKey("connectTimeout") ? options.getInt("connectTimeout") : 0; 
+         socket.connect(new InetSocketAddress(remoteInetAddress, port), connectTimeout);
+-        if (socket instanceof SSLSocket) ((SSLSocket) socket).startHandshake();
++        if (sslFactory != null) {
++            // Layer TLS over the connected plain socket using the real
++            // hostname so endpoint identification can verify the certificate
++            // against the SAN/CN, and enable the HTTPS identification
++            // algorithm before the handshake.
++            SSLSocket sslSocket = (SSLSocket) sslFactory.createSocket(socket, address, port, true);
++            sslSocket.setUseClientMode(true);
++            SSLParameters sslParams = sslSocket.getSSLParameters();
++            sslParams.setEndpointIdentificationAlgorithm("HTTPS");
++            sslSocket.setSSLParameters(sslParams);
++            sslSocket.startHandshake();
++            socket = sslSocket;
++        }
+         startListening();
+     }
+ 
+     public void startTLS(Context context, ReadableMap tlsOptions) throws IOException, GeneralSecurityException {
+         if (socket instanceof SSLSocket) return;
+         SSLSocketFactory ssf = getSSLSocketFactory(context, tlsOptions);
+-        SSLSocket sslSocket = (SSLSocket) ssf.createSocket(socket, socket.getInetAddress().getHostAddress(), socket.getPort(), true);
++        SSLSocket sslSocket = (SSLSocket) ssf.createSocket(socket, socket.getInetAddress().getHostName(), socket.getPort(), true);
+         sslSocket.setUseClientMode(true);
++        SSLParameters startTlsParams = sslSocket.getSSLParameters();
++        startTlsParams.setEndpointIdentificationAlgorithm("HTTPS");
++        sslSocket.setSSLParameters(startTlsParams);
+         sslSocket.startHandshake();
+         socket = sslSocket;
+     }

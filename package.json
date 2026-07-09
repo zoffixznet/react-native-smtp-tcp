@@ -42,6 +42,8 @@
   "sideEffects": false,
   "files": [
     "dist",
+    "app.plugin.js",
+    "patches",
     "README.md",
     "LICENSE"
   ],
