@@ -99,6 +99,9 @@ export class SmtpClient {
   private capabilities: Capabilities | null = null;
 
   private pending: Pending | null = null;
+  /** Replies that completed before a consumer was waiting (e.g. the greeting
+   * arriving in the same tick the handler is armed). Delivered in order. */
+  private replyQueue: SmtpReply[] = [];
   private closed = false;
   private closedError: Error | null = null;
   private hadError = false;
@@ -357,9 +360,18 @@ export class SmtpClient {
       );
     }
 
-    // Drain-before-wrap: after the 220 line, the read buffer MUST be empty. Any
-    // residual bytes are a response/command injection attempt.
-    if (this.reader.hasBufferedBytes()) {
+    // Drain-before-wrap (SEC-3, CVE-2011-0411 / CVE-2026-41319 class): after the
+    // single STARTTLS 220 line, NOTHING may remain to be processed. This covers
+    // three ways a hostile server can smuggle bytes across the TLS boundary:
+    //   - residual bytes still buffered in the reader (partial extra line),
+    //   - a fully parsed extra reply that was queued after the 220,
+    //   - a continuation line that left the parser mid-reply.
+    // Any of these is a response/command injection attempt; abort before TLS.
+    if (
+      this.reader.hasBufferedBytes() ||
+      this.replyQueue.length > 0 ||
+      this.parser.inProgress()
+    ) {
       throw new SmtpSecurityError(
         'unexpected data received after the STARTTLS reply; aborting before TLS',
       );
@@ -547,7 +559,14 @@ export class SmtpClient {
       this._duringAuth = Boolean(opts.isAuth || opts.isAuthExchange);
       this.log(opts, line);
 
-      this.pending = {
+      this.armIdleTimer();
+      this.transport.write(wire, (err) => {
+        if (err) {
+          this.failPending(new SmtpConnectionError(`write failed: ${err.message}`));
+        }
+      });
+
+      this.setPending({
         resolve: (reply) => {
           if (opts.expect && !opts.expect.includes(reply.code)) {
             const err = new SmtpProtocolError(
@@ -564,13 +583,6 @@ export class SmtpClient {
           resolve(reply);
         },
         reject,
-      };
-
-      this.armIdleTimer();
-      this.transport.write(wire, (err) => {
-        if (err) {
-          this.failPending(new SmtpConnectionError(`write failed: ${err.message}`));
-        }
       });
     });
   }
@@ -581,11 +593,11 @@ export class SmtpClient {
         reject(this.closedError ?? new SmtpConnectionError('connection is closed'));
         return;
       }
-      this.pending = { resolve, reject };
       this.armIdleTimer();
       this.transport.write(payload, (err) => {
         if (err) this.failPending(new SmtpConnectionError(`write failed: ${err.message}`));
       });
+      this.setPending({ resolve, reject });
     });
   }
 
@@ -635,9 +647,27 @@ export class SmtpClient {
         const p = this.pending;
         this.pending = null;
         this.clearIdleTimer();
-        if (p) p.resolve(step.reply);
+        if (p) {
+          p.resolve(step.reply);
+        } else {
+          // No consumer is waiting yet (e.g. the greeting arrived in the same
+          // tick the handler is being armed). Queue it for the next waiter.
+          this.replyQueue.push(step.reply);
+        }
       }
     }
+  }
+
+  /** Assign the pending handler, delivering a queued reply immediately if one
+   * is already available so no reply is lost to a scheduling race. */
+  private setPending(p: Pending): void {
+    const queued = this.replyQueue.shift();
+    if (queued !== undefined) {
+      this.clearIdleTimer();
+      p.resolve(queued);
+      return;
+    }
+    this.pending = p;
   }
 
   /** True while the pending command is part of an AUTH exchange (replies are
@@ -686,7 +716,7 @@ export class SmtpClient {
         this.close();
       }, this.timeouts.greetingMs);
 
-      this.pending = {
+      this.setPending({
         resolve: (reply) => {
           clearTimeout(timer);
           if (reply.code !== 220) {
@@ -704,7 +734,7 @@ export class SmtpClient {
           clearTimeout(timer);
           reject(err);
         },
-      };
+      });
     });
   }
 

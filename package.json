@@ -1,6 +1,6 @@
 {
   "name": "react-native-smtp-tcp",
-  "version": "0.1.0",
+  "version": "1.0.0-rc.1",
   "description": "Hardened, dependency-light SMTP submission client for React Native, speaking SMTP over a native TCP/TLS socket. Implicit TLS (465) and STARTTLS (587), AUTH PLAIN/LOGIN/XOAUTH2, MIME with attachments.",
   "keywords": [
     "react-native",

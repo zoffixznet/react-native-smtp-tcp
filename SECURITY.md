@@ -2,13 +2,12 @@
 
 ## Supported versions
 
-This library is pre-1.0. Security fixes are released against the latest published
-minor version. Until 1.0, only the most recent release line receives fixes.
+Security fixes are released against the latest published minor version. Only the
+most recent release line receives fixes.
 
 | Version | Supported |
 | ------- | --------- |
-| 0.1.x   | Yes       |
-| < 0.1   | No        |
+| 1.x     | Yes       |
 
 ## Reporting a vulnerability
 

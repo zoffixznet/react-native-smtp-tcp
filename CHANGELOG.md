@@ -5,9 +5,8 @@ Keep a Changelog, and this project adheres to Semantic Versioning.
 
 ## [Unreleased]
 
-## [0.1.0]
-
-Initial release.
+Initial release candidate (1.0.0-rc.1). The 1.0.0 release will be finalized
+after the security review.
 
 ### Added
 
