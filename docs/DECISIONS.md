@@ -1,16 +1,7 @@
 # Decisions
 
-Ambiguities resolved during the build, with the option chosen and why. Newest
-entries are appended at the end.
-
-## Internal build spec is not published
-
-The internal build specification is deliberately kept out of this repository. It
-describes how the library was produced and is not part of the library's public
-surface. Keeping it out avoids leaking build context and keeps the repository a
-clean, standalone SMTP client as a human author would ship it. The public
-documentation (README, this file, PLAN.md) is written independently against the
-RFCs.
+Engineering decisions and the option chosen, with the reasoning. Newest entries
+are appended at the end.
 
 ## Build system and module format
 
@@ -36,9 +27,8 @@ tests.
 
 `secure: 'auto'` resolves from the port: 465 implies implicit TLS, anything else
 implies STARTTLS. When the caller sets `secure: 'auto'` without a port, 465
-implicit TLS is chosen as the preferred, unstrippable default (SEC-1, SEC-26).
-`auto` never means "try plaintext"; `requireTLS` defaults to true and a secure
-account never sends anything sensitive in cleartext.
+implicit TLS is chosen as the default. `auto` does not mean "try plaintext";
+`requireTLS` defaults to true, so nothing is sent in cleartext.
 
 ## Cipher and TLS-version enforcement in the Node adapter
 
@@ -49,30 +39,52 @@ JS cipher/min-version knob; the platform TLS stack governs this. That gap is
 documented in the README known-limitations section. The protocol engine still
 treats a failed or downgraded handshake as an abort.
 
-## Post-handshake SPKI pinning
+## Native hostname verification on Android
 
-Pinning is implemented as a post-handshake check: after `secureConnect`, the
-adapter exposes the peer certificate (Node: DER + public key; RN:
-`getPeerCertificate()`), and the client compares the SPKI SHA-256 against the
-configured `pinnedSpkiSha256`, destroying the socket on mismatch. This is
-best-effort on RN because the native module only exposes the certificate after
-the handshake completes; PKIX path and hostname checks still run against the
-configured trust anchor. This matches the transport's real surface.
+Stock `react-native-tcp-socket` v6.4.1 validates the certificate chain (default
+trust manager) but does not verify the hostname: the implicit-TLS path calls
+`ssf.createSocket()` with no host and connects by resolved IP, the STARTTLS path
+layers TLS using the resolved IP string, and neither sets
+`SSLParameters.setEndpointIdentificationAlgorithm("HTTPS")`. Hostname
+verification therefore cannot be added in pure JavaScript on top of it (the
+module exposes no certificate DER or parsed SAN).
 
-## Hostname verification for bare-IP hosts
+The library enables it in the native layer at app build time. The Expo config
+plugin (during `expo prebuild`) and the patch-package patch (bare React Native)
+apply the same source transform to `TcpSocketClient.java`: both paths create the
+SSLSocket with the real hostname and set the HTTPS endpoint identification
+algorithm before the handshake, so the native handshake rejects a certificate
+whose SAN/CN does not match the host. The transform is a set of anchored,
+idempotent string replacements shared by the plugin and the patch and unit-tested
+in Node. On iOS the default TLS path sets the peer name
+(`kCFStreamSSLPeerName`), so the platform verifies the hostname there.
 
-When `host` is a bare IP, the Node adapter cannot rely on SNI-driven identity
-checks alone, so an explicit `tls.servername`/expected-hostname is required and
-used for identity verification; without it the connection aborts (SEC-11). On
-RN, where there is no SNI override, the same explicit expected hostname is
-required and the post-handshake identity check enforces it.
+Because verification is enforced by the handshake, the JavaScript layer no longer
+parses certificates for identity; it relies on a correct native handshake, the
+same way the Node path relies on `rejectUnauthorized`.
+
+## Optional certificate-fingerprint pinning
+
+Pinning is an optional, post-handshake check layered on top of the default chain
+and hostname verification, never instead of it. When `tls.pinnedCertSha256` is
+set, the client awaits the peer certificate (the native `getPeerCertificate()`
+resolves asynchronously) and compares its `fingerprint256` against the configured
+pin, normalizing both to lowercase hex, and destroys the socket on mismatch. A
+leaf SHA-256 fingerprint is used rather than an SPKI hash because the platforms
+expose `fingerprint256` directly and it needs no additional hashing.
+
+## Bare-IP hosts
+
+When `host` is a bare IP, an explicit `tls.servername` is required as the expected
+certificate identity; without it the connection aborts. The handshake matches the
+certificate's IP SANs against the connected address.
 
 ## AUTH mechanism preference
 
 Preference order is XOAUTH2/OAUTHBEARER, then SCRAM-SHA-256, then CRAM-MD5, then
-LOGIN, then PLAIN, restricted to the post-TLS advertised set. v1 ships encoders
-for PLAIN, LOGIN, and XOAUTH2 (the spec's v1 scope). SCRAM and CRAM-MD5 are
-recognized for negotiation ordering but not implemented as senders in v1; if the
+LOGIN, then PLAIN, restricted to the post-TLS advertised set. This version ships
+encoders for PLAIN, LOGIN, and XOAUTH2. SCRAM and CRAM-MD5 are
+recognized for negotiation ordering but not implemented as senders; if the
 server advertises only mechanisms the library cannot perform, it refuses to
 authenticate rather than downgrading silently. CRAM-MD5 is deliberately not used
 as a primary mechanism.
@@ -105,14 +117,13 @@ submission client that sends one message per connection. The reply reader and
 parser still refuse to merge two single-line replies into one multiline reply,
 so a server that volunteers extra replies is treated as a protocol violation.
 
-## Device-only tests recorded as a known limitation
+## Device-only behavior is a known limitation
 
-The `react-native-tcp-socket` adapter (T-RN-ADAPTER-SMOKE, T-TRUST-LIMIT on a
-physical device) cannot run in this environment because the native module is not
-present off-device. The adapter is kept as thin as possible over the verified
-v6.4.1 API, the pinning comparison and the drain-before-wrap orchestration it
-relies on are proven in Node, and on-device validation is documented in the
-README under known limitations. T-PROVENANCE-SIG is asserted structurally in the
-publish workflow (`--provenance --access public`, `id-token: write`); `npm audit
-signatures` needs a published package, so it is documented rather than run
-against an unpublished build.
+The `react-native-tcp-socket` adapter and the native hostname-verification setup
+run only where the native module is present, so they are not exercised by the
+Node test suite. The adapter is kept thin over the v6.4.1 API; the pinning
+comparison and the drain-before-wrap orchestration it relies on run in Node, and
+on-device behavior is documented in the README under known limitations. Package
+provenance is configured in the publish workflow (`--provenance --access public`,
+`id-token: write`); `npm audit signatures` needs a published package, so it is
+documented rather than run against an unpublished build.

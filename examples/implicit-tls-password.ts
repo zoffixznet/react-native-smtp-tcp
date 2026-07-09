@@ -1,8 +1,8 @@
 /**
  * Implicit TLS (port 465) with password authentication.
  *
- * Implicit TLS is the preferred transport: the connection is encrypted from the
- * first byte, so there is no cleartext phase to strip or inject into.
+ * With implicit TLS the connection is encrypted from the first byte, so there is
+ * no plaintext phase.
  */
 
 import { createTransport } from 'react-native-smtp-tcp';

@@ -29,12 +29,12 @@ published source at tag `v6.4.1` and its npm registry metadata. Confirmed:
   includes `tlsCheckValidity?: boolean`. The library never sets this to a value
   that would weaken validation; see `docs/DECISIONS.md`.
 
-These match the spec's transport notes, so the injectable `SmtpTransport`
-interface in the spec is used as written.
+Given these transport facts, the library depends on the injectable
+`SmtpTransport` interface rather than on the native module directly.
 
 ## Chosen design
 
-Three pure layers plus adapters, matching the spec's suggested architecture:
+Three pure layers plus adapters:
 
 - `src/protocol/` - the transport-agnostic SMTP engine. No React Native and no
   Node imports. Depends only on the `SmtpTransport` interface.
@@ -100,7 +100,7 @@ Security:
 - SEC-5 (never pipeline after STARTTLS) -> covered in client tests + drain tests.
 - SEC-6 (PKIX + hostname) -> T-WRONG-HOSTNAME-CERT, T-UNTRUSTED-CHAIN.
 - SEC-7 (no disable-validation) -> T-NO-DISABLE-VALIDATION-LINT.
-- SEC-8 (pinning) -> T-SPKI-PIN-POS-NEG, T-TRUST-LIMIT.
+- SEC-8 (optional certificate pin) -> T-CERT-PIN-POS-NEG, T-TRUST-LIMIT.
 - SEC-9 (min TLS 1.2) -> T-MIN-TLS-VERSION.
 - SEC-10 (strong ciphers) -> T-WEAK-CIPHER.
 - SEC-11 (SNI to hostname / bare IP identity) -> T-IP-SNI.
@@ -151,12 +151,11 @@ Injectable core / adapters:
 
 The plan above was followed. The result:
 
-- 202 tests across 22 files, all green. Coverage is 95.6% statements and 90.4%
-  branches (over the 90% gate), enforced by `make cover`. The security-critical
-  paths (STARTTLS drain-before-wrap, certificate and hostname validation, SPKI
-  pinning, injection rejection, DoS caps, AUTH gating, timeouts, mid-dialog
-  failure) are exercised by real adversarial tests and real in-process SMTP/TLS
-  servers, not padded.
+- The test suite runs over the 90% coverage gate, enforced by `make cover`. The
+  covered paths (STARTTLS drain-before-wrap, certificate and hostname validation,
+  the optional certificate pin, injection rejection, reply-parsing caps, AUTH
+  gating, timeouts, mid-dialog failure) are exercised with in-memory fake sockets
+  and in-process SMTP/TLS servers.
 - The pure protocol and message engines import no React Native and no Node
   modules (only the `buffer` package). The Node adapter and the React Native
   adapter are the only platform-specific files; the React Native module is
@@ -164,6 +163,6 @@ The plan above was followed. The result:
 - Packaging is publish-ready: a `files` allowlist, MIT `LICENSE`, `SECURITY.md`,
   `CHANGELOG.md`, correct `package.json` metadata, a passing pack/secret-scan
   check, and a provenance-ready CI plus a manual publish workflow.
-- One design change during the build hardened the STARTTLS drain check: a fully
-  parsed injected reply (queued in the same tick the 220 resolved) or a mid-reply
-  parser state now also aborts the connection, not just leftover buffered bytes.
+- The STARTTLS drain check aborts the connection not only on leftover buffered
+  bytes but also on a fully parsed injected reply (queued in the same tick the
+  220 resolved) or a mid-reply parser state.

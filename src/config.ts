@@ -100,8 +100,7 @@ export function resolveConfig(options: TransportOptions): ResolvedConfig {
     secure = 'starttls';
     port = port ?? 587;
   } else {
-    // auto: derive from the port, defaulting to implicit TLS on 465 which is the
-    // preferred, unstrippable transport.
+    // auto: derive from the port, defaulting to implicit TLS on 465.
     if (port === 465) secure = 'implicit';
     else if (port === 587 || port === 25) secure = 'starttls';
     else {

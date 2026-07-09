@@ -1,13 +1,13 @@
 /**
  * Node net/tls adapter implementing {@link SmtpTransport}.
  *
- * This is the reference adapter and the one the test suite drives. It performs
- * real certificate chain and hostname validation, sets a minimum TLS version
- * and a forward-secret AEAD cipher list, and exposes the peer certificate for
- * SPKI pinning. It never disables validation.
+ * This adapter is used by the test suite. It connects with certificate chain
+ * and hostname validation on (rejectUnauthorized), sets a minimum TLS version
+ * and an AEAD cipher list, and exposes the peer certificate for the optional
+ * fingerprint pin.
  *
- * It is the only place, besides the React Native adapter, that imports platform
- * socket APIs; the protocol engine never imports Node modules.
+ * It is one of two places (with the React Native adapter) that import platform
+ * socket APIs; the protocol engine imports no Node modules.
  */
 
 import net from 'net';

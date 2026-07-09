@@ -1,10 +1,10 @@
 /**
  * react-native-smtp-tcp
  *
- * Public API. A hardened SMTP submission client for React Native that speaks the
- * SMTP protocol over a native TCP/TLS socket, with implicit TLS (465) preferred
- * and STARTTLS (587) supported, always-on certificate validation, AUTH PLAIN /
- * LOGIN / XOAUTH2, and a MIME builder with attachments.
+ * Public API. An SMTP client for React Native that submits messages over a
+ * native TCP/TLS socket: implicit TLS (465) or STARTTLS (587), AUTH PLAIN /
+ * LOGIN / XOAUTH2, and a MIME builder with attachments. TLS certificate and
+ * hostname verification is on by default.
  */
 
 import { resolveConfig } from './config';

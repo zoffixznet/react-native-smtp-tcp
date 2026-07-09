@@ -138,7 +138,7 @@ export function encodeHeaderWord(value: string): string {
   }
 
   const charset = 'UTF-8';
-  // Use base64 for the encoded content; robust and simple to bound.
+  // Use base64 for the encoded content; simple to bound per encoded-word.
   const bytes = Buffer.from(value, 'utf8');
   // Each encoded-word is: =?UTF-8?B?<data>?= and must be <= 75 chars total.
   // Overhead = "=?UTF-8?B?" (10) + "?=" (2) = 12. So data budget = 63 chars of
