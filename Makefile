@@ -3,7 +3,10 @@
 # Bare `make` prints this help. Every target works on a fresh clone.
 
 .DEFAULT_GOAL := help
-.PHONY: help install build test cover lint typecheck check ci pack-check clean
+.PHONY: help install build test cover lint typecheck check ci pack-check clean release
+
+# Version bump for `make release`: patch (default), minor, major, or an explicit X.Y.Z.
+VERSION ?= patch
 
 help: ## List available targets
 	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -38,3 +41,8 @@ ci: typecheck lint cover pack-check ## Full CI: typecheck, lint, coverage gate, 
 clean: ## Remove build and coverage artifacts
 	npm run clean
 	rm -rf coverage *.tgz
+
+release: ## Bump version (VERSION=patch|minor|major|X.Y.Z), tag, push, and publish to npm
+	npm version $(VERSION)
+	git push origin HEAD --follow-tags
+	npm publish --access public
