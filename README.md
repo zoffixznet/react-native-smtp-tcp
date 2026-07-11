@@ -256,7 +256,7 @@ STARTTLS with a password, and OAuth2 with a token provider.
 The `Makefile` is the front door; run `make` (or `make help`) to list targets.
 
 ```sh
-make install     # install dependencies
+make deps        # install dependencies
 make build       # compile to dist/ (ESM + CJS + types)
 make test        # run the test suite
 make cover       # run tests with coverage (fails under 90%)

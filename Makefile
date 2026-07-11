@@ -3,7 +3,7 @@
 # Bare `make` prints this help. Every target works on a fresh clone.
 
 .DEFAULT_GOAL := help
-.PHONY: help install build test cover lint typecheck check ci pack-check clean release
+.PHONY: help deps build test cover lint typecheck check ci pack-check clean release
 
 # Version bump for `make release`: patch (default), minor, major, or an explicit X.Y.Z.
 VERSION ?= patch
@@ -13,7 +13,7 @@ help: ## List available targets
 		| sort \
 		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
 
-install: ## Install dependencies (npm ci if a lockfile exists, else npm install)
+deps: ## Install dependencies (npm ci if a lockfile exists, else npm install)
 	@if [ -f package-lock.json ]; then npm ci; else npm install; fi
 
 build: ## Compile TypeScript to dist (ESM + CJS + types)
